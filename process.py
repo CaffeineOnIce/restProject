@@ -43,13 +43,15 @@ def log_data():
             avg_temp = statistics.mean(temp_history)
             avg_hum = statistics.mean(hum_history)
 
-            supabase.table("processed_data").insert({
-                "avg_temp": avg_temp,
-                "avg_hum": avg_hum
-            }).execute()
-
-            temp_history.clear()
-            hum_history.clear()
+            try:
+                supabase.table("processed_data").insert({
+                    "avg_temp": avg_temp,
+                    "avg_hum": avg_hum
+                }).execute()
+                temp_history.clear()
+                hum_history.clear()
+            except Exception as e:
+                print(f"Supabase insert failed: {e}")
 
     return jsonify({"status": "logged"}), 200
 

@@ -8,6 +8,10 @@ load_dotenv()
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 app = Flask(__name__)
 
+@app.route("/")
+def home():
+    return jsonify({"status": "API running", "endpoints": ["/latest", "/fetch"]}), 200
+
 @app.route("/latest", methods=["GET"])
 def get_latest():
     res = supabase.table("processed_data").select("*").order("id", desc=True).limit(1).execute()

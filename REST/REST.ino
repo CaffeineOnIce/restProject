@@ -9,7 +9,7 @@ DHT dht(DHTPIN, DHTTYPE);
 
 const char* ssid = "BoxRouter";
 const char* password = "routerBox1290";
-const char* serverName = "http://192.168.29.115:5000/fetch";
+const char* serverName = "http://DietPi.local:5000/fetch";
 
 void setup() {
   Serial.begin(115200);
@@ -35,6 +35,10 @@ void loop() {
       WiFiClient client;
       HTTPClient http;
       http.begin(client, serverName);
+
+      http.setConnectTimeout(5000);   // 5s to establish connection
+      http.setTimeout(10000);  
+      
       http.addHeader("Content-Type", "application/json");
 
       JsonDocument doc; 
