@@ -10,7 +10,7 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return jsonify({"status": "API running", "endpoints": ["/latest", "/fetch"]}), 200
+    return jsonify({"status": "API running", "endpoints": ["/latest"]}), 200
 
 @app.route("/latest", methods=["GET"])
 def get_latest():
