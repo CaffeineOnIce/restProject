@@ -1,12 +1,17 @@
 import os
 from dotenv import load_dotenv
-from supabase import create_client, Client
-from flask import Flask, jsonify, request
+from supabase import create_client
+from flask import Flask, jsonify
 
 load_dotenv()
 
-url = os.getenv("SUPABASE_URL")
-key = os.getenv("SUPABASE_KEY")
+supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+app = Flask(__name__)
 
-supabase = create_client(url, key)
-res = supabase.table("processed_data").select("*").order('id',desc=True).limit(1).execute()
+@app.route("/latest", methods=["GET"])
+def get_latest():
+    res = supabase.table("processed_data").select("*").order("id", desc=True).limit(1).execute()
+    return jsonify(res.data), 200
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)
