@@ -15,7 +15,7 @@ def home():
 @app.route("/latest", methods=["GET"])
 def get_latest():
     res = supabase.table("processed_data").select("*").order("id", desc=True).limit(1).execute()
-    return jsonify(res.data), 200
+    return jsonify(res.data[0]), 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)

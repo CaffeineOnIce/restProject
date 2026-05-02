@@ -1,7 +1,7 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <DHT.h>
-#include <ArduinoJson.h> // 1. Added missing library
+#include <ArduinoJson.h> 
 
 #define DHTPIN 4        
 #define DHTTYPE DHT11 
