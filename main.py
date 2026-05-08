@@ -1,22 +1,33 @@
-#!/usr/bin/env python3
-import os, time
-from flask import Flask, jsonify, request
+# main.py
+import os
+import time
+from flask import Flask, jsonify
 from supabase import create_client
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv()  # Load .env if present (Render uses env vars directly)
+
 app = Flask(__name__)
-supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_ANON_KEY"))
-POLL_INTERVAL = 1  # seconds
-TIMEOUT = 60       # seconds
+
+# Initialize Supabase (will fail fast if keys missing)
+try:
+    supabase = create_client(
+        os.environ["SUPABASE_URL"],
+        os.environ["SUPABASE_KEY"]
+    )
+except KeyError as e:
+    raise RuntimeError(f"Missing required env var: {e}")
+
+POLL_INTERVAL = 1
+TIMEOUT = 60
 
 @app.route("/fetch", methods=["POST"])
 def fetch():
-    # 1. Create job
+    # Create job
     job = supabase.table("fetch_jobs").insert({"status": "pending"}).execute().data[0]
     job_id = job["id"]
     
-    # 2. Poll for completion
+    # Poll for completion
     for _ in range(TIMEOUT // POLL_INTERVAL):
         time.sleep(POLL_INTERVAL)
         result = supabase.table("fetch_jobs").select("*").eq("id", job_id).execute().data[0]
@@ -25,9 +36,10 @@ def fetch():
         if result["status"] == "error":
             return jsonify({"error": result["error_msg"]}), 500
     
-    # 3. Timeout: mark as error
+    # Timeout
     supabase.table("fetch_jobs").update({"status": "error", "error_msg": "Timeout"}).eq("id", job_id).execute()
     return jsonify({"error": "Request timed out"}), 504
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
+@app.route("/health", methods=["GET"])
+def health():
+    return jsonify({"status": "ok"}), 200
