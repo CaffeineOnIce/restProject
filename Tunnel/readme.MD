@@ -7,10 +7,6 @@
 4. `requirements` -> Raspberry Pi  
 5. No Render -> Used Zrok for tunneling straight to Rasp.  
 
-Domain provided by zrok -> `restproj.shares.zrok.io`
-
-Domain is reserved using zrok, so, cannot use other domains unless edited.
-
 # Zrok steps
 
 1. Install zrok  
@@ -29,6 +25,8 @@ zrok2 share public localhost:<port> -n public:<name>
 
 Name used is `restproj`.
 Port used is `8080`.
+Domain provided by zrok -> `restproj.shares.zrok.io`
+Domain is reserved using zrok, so, cannot use other domains unless edited.
 
 # Steps
 
