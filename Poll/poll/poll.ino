@@ -38,7 +38,6 @@ void handleGas() {
   MQ135.update();
   float gasVal = MQ135.readSensor();
 
-  // Fixed the missing '+' here
   String json = "{\"gas\":" + String(gasVal, 1) + "}";
   server.send(200, "application/json", json);
 }

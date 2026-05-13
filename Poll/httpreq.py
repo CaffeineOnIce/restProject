@@ -10,7 +10,6 @@ ESP32_URL = os.getenv("ESP32_URL", "esp32.local")
 POLL_INTERVAL = 2
 
 # --- SENSOR FETCHING FUNCTIONS ---
-
 def fetch_temp_hum(samples=5):
     temps, hums = [], []
     for _ in range(samples):
