@@ -18,31 +18,24 @@ Domain is reserved using zrok, so, cannot use other domains unless edited.
 3. Start zrok as a service  
 4. Create zrok account  
 5. Enable zrok environment  
-
-## For custom domain name
-
+6. For custom domain name:
 ```bash
 zrok2 create name <name>
 ```
-
-## Public share
-
+7. Public share:
 ```bash
 zrok2 share public localhost:<port> -n public:<name>
 ```
 
 Name used is `restproj`.
-
 Port used is `8080`.
 
 # Steps
 
 ## Calling
-
 ```bash
 curl -sL restproj.shares.zrok.io/temphum | jq
 ```
-
 - `/temphum` for temp and humidity  
 - `/gas` for gas  
 
