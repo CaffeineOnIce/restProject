@@ -19,4 +19,3 @@ curl -s -X POST https://restproject-h1uq.onrender.com/gas | jq
 - `/gas` for gas  
 
 Outputs in JSON.
-```
