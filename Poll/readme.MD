@@ -10,11 +10,9 @@
 # Steps
 
 ## Calling
-
 ```bash
 curl -s -X POST https://restproject-h1uq.onrender.com/gas | jq
 ```
-
 - `/temphum` for temp and humidity  
 - `/gas` for gas  
 

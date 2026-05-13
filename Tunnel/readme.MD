@@ -23,10 +23,10 @@ zrok2 create name <name>
 zrok2 share public localhost:<port> -n public:<name>
 ```
 
-Name used is `restproj`.
-Port used is `8080`.
-Domain provided by zrok -> `restproj.shares.zrok.io`
-Domain is reserved using zrok, so, cannot use other domains unless edited.
+- Name used is `restproj`.
+- Port used is `8080`.
+- Domain provided by zrok -> `restproj.shares.zrok.io`
+- Domain is reserved using zrok, so, cannot use other domains unless edited.
 
 # Steps
 
