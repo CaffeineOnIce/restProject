@@ -1,0 +1,7 @@
+Where these should be placed?
+
+httpreq -> Raspberry Pi
+main -> Render
+serverless-poll -> systemd service (Keep parent directory as "REST" or change paths in the file)
+.env -> Render AND Raspberry Pi
+requirements -> Render
