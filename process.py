@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv(".env")
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
-ESP32_URL = os.getenv("ESP32_URL", "http://192.168.29.192")
+ESP32_URL = os.getenv("ESP32_URL", "http://myesp32.local")
 POLL_INTERVAL = 2
 
 # --- SENSOR FETCHING FUNCTIONS ---
