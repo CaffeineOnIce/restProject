@@ -1,17 +1,22 @@
 # Where these should be placed?
 
-1. httpreq -> Raspberry Pi
-2. main -> Render
-3. serverless-poll -> systemd service (Keep parent directory as "REST" or change paths in the file)
-4. .env -> Render AND Raspberry Pi
-5. requirements -> Render AND Raspberry Pi
+1. `httpreq` -> Raspberry Pi  
+2. `main` -> Render  
+3. `serverless-poll` -> systemd service  
+   (Keep parent directory as `"REST"` or change paths in the file)  
+4. `.env` -> Render AND Raspberry Pi  
+5. `requirements` -> Render AND Raspberry Pi  
 
 # Steps
-1. Calling -
+
+## Calling
+
 ```bash
 curl -s -X POST https://restproject-h1uq.onrender.com/gas | jq
 ```
-/temphum for temp and humidity
-/gas for gas
 
-Outputs in json.
+- `/temphum` for temp and humidity  
+- `/gas` for gas  
+
+Outputs in JSON.
+```
