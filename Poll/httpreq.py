@@ -38,7 +38,7 @@ def fetch_gas(samples=5):
             print(f"Error fetching Gas: {e}")
         time.sleep(0.2)
     
-    if len(gas_readings) < 3: return None
+    if len(gas_readings) < 5: return None
     return round(statistics.mean(gas_readings), 2)
 
 def process_temphum():
