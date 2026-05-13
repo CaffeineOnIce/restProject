@@ -4,7 +4,7 @@ from flask import Flask, jsonify
 
 app = Flask(__name__)
 
-SERVER_IP = "https://projrest.shares.zrok.io"
+SERVER_IP = "https://restproj.shares.zrok.io"
 
 @app.route("/th", methods=["GET"])
 def get_temp_hum():
