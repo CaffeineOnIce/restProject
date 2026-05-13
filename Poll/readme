@@ -4,4 +4,13 @@ httpreq -> Raspberry Pi
 main -> Render
 serverless-poll -> systemd service (Keep parent directory as "REST" or change paths in the file)
 .env -> Render AND Raspberry Pi
-requirements -> Render
+requirements -> Render AND Raspberry Pi
+
+Steps:
+1. Calling - 
+curl -s -X POST https://restproject-h1uq.onrender.com/gas | jq
+
+/temphum for temp and humidity
+/gas for gas
+
+Outputs in json

@@ -1,0 +1,33 @@
+Where these should be placed?
+
+httpreq -> Raspberry Pi
+serverless-tunnel -> systemd service (Keep parent directory as "REST" or change paths in the file)
+.env -> Raspberry Pi
+requirements -> Raspberry Pi
+No Render -> Used Zrok for tunneling straight to Rasp.
+
+Domain provided by zrok -> restproj.shares.zrok.io
+Domain is reserved using zrok, so, cannot use other domains unless edited.
+
+Zrok steps: 
+1. Install zrok
+2. Install zrok agent
+3. Start zrok as a service
+4. Create zrok account
+5. Enable zrok environment
+6. For custom domain name-
+    zrok2 create name <name>
+7. Public share-
+    zrok2 share public localhost:<port> -n public:<name>
+
+Name used is restproj.
+Port used is 8080.
+
+Steps:
+1. Calling - 
+curl -sL restproj.shares.zrok.io/temphum | jq .
+
+/temphum for temp and humidity
+/gas for gas
+
+Outputs in json.

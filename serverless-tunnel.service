@@ -1,0 +1,12 @@
+[Unit]
+Description=TUNNEL
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/REST
+ExecStart=/REST/.venv/bin/python3 /REST/httpreq.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
