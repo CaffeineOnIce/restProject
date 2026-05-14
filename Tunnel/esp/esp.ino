@@ -3,6 +3,7 @@
 #include <MQUnifiedsensor.h>
 #include <WebServer.h>
 #include <WiFi.h>
+#include <HTTPClient.h>
 
 #define placa "ESP32"
 #define Voltage_Resolution 3.3
@@ -19,8 +20,7 @@ WebServer server(80);
 
 const char* ssid = "BoxRouter";
 const char* password = "routerBox1290";
-
-const char* hostname = "esp32";  // Access at esp32.local
+const char* hostname = "esp32"; 
 
 void handleTempHum() {
   float t = dht.readTemperature();
@@ -29,15 +29,13 @@ void handleTempHum() {
     server.send(500, "application/json", "{\"error\":\"Sensor read failed\"}");
     return;
   }
-  String json = "{\"temperature\":" + String(t, 1) +
-                ",\"humidity\":" + String(h, 1) + "}";
+  String json = "{\"temperature\":" + String(t, 1) + ",\"humidity\":" + String(h, 1) + "}";
   server.send(200, "application/json", json);
 }
 
 void handleGas() {
   MQ135.update();
   float gasVal = MQ135.readSensor();
-
   String json = "{\"gas\":" + String(gasVal, 1) + "}";
   server.send(200, "application/json", json);
 }
@@ -52,18 +50,18 @@ void setup() {
     delay(500);
     Serial.print(".");
   }
-  Serial.println("\nConnected!");
-  Serial.println(WiFi.localIP());
+  Serial.println("\nConnected! IP: " + WiFi.localIP().toString());
 
   if (!MDNS.begin(hostname)) {
     Serial.println("Error starting mDNS");
-    return;
+  } else {
+    MDNS.addService("http", "tcp", 80);
+    Serial.println("mDNS started: http://esp32.local");
   }
-  Serial.println("mDNS started: http://" + String(hostname) + ".local");
 
-  // MQ-135 Setup
+  // MQ-135 Calibration Setup
   MQ135.setRegressionMethod(1);
-  MQ135.setA(110.47);  // CO2
+  MQ135.setA(110.47);  // CO2 setup values
   MQ135.setB(-2.862);
   MQ135.init();
 
@@ -75,20 +73,15 @@ void setup() {
     Serial.print(".");
     delay(100);
   }
-
   MQ135.setR0(calcR0 / 10);
   Serial.println(" Done!");
-
-  if (isinf(calcR0) || calcR0 == 0) {
-    Serial.println("Warning: Calibration failed. Check wiring.");
-  }
-
-  MQ135.serialDebug(false);
 
   server.on("/temphum", HTTP_GET, handleTempHum);
   server.on("/gas", HTTP_GET, handleGas);
   server.begin();
-  Serial.println("HTTP server started");
+  Serial.println("HTTP server online.");
 }
 
-void loop() { server.handleClient(); }
+void loop() { 
+  server.handleClient(); 
+}

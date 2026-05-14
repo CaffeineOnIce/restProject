@@ -1,0 +1,32 @@
+[Unit]
+Description=Zrok Permanent Public Tunnel (restapi)
+After=esp32-bridge.service
+Requires=esp32-bridge.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Restart=no
+User=root
+Environment=HOME=/root
+StandardInput=null
+StandardOutput=journal
+StandardError=journal
+
+# 1. Clear any lingering zrok instances on boot
+ExecStartPre=-/usr/bin/pkill -f zrok2
+
+# 2. SILENT CLEANUP: Dynamically find ALL shares and delete them while hiding 404 output
+ExecStartPre=-/bin/bash -c 'for token in $$(/usr/bin/zrok2 list names | awk "NR>3 {print $$2}"); do if [[ $$token =~ ^[a-zA-Z0-9]+$$ ]]; then /usr/bin/zrok2 delete share "$$token" >/dev/null 2>&1; fi; done'
+
+# 3. Cleanly clear out old name assignment slot
+ExecStartPre=-/usr/bin/zrok2 delete name -n public restapi
+
+# 4. Provision completely fresh registration block on the server
+ExecStartPre=/usr/bin/zrok2 create name -n public restapi
+
+# 5. Launch tunnel background fork with --headless explicitly declared
+ExecStart=/usr/bin/zrok2 share public http://127.0.0.1:52471 -n public:restapi --headless
+
+[Install]
+WantedBy=multi-user.target

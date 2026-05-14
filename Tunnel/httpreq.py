@@ -6,7 +6,11 @@ from flask import Flask, jsonify
 
 load_dotenv(".env")
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+
+# Ensure the URL is properly formatted with an HTTP prefix
 ESP32_URL = os.getenv("ESP32_URL", "esp32.local")
+if not ESP32_URL.startswith("http://") and not ESP32_URL.startswith("https://"):
+    ESP32_URL = f"http://{ESP32_URL}"
 
 app = Flask(__name__)
 
@@ -68,7 +72,6 @@ def api_temphum():
 def api_gas():
     return jsonify(handle_gas())
 
-
 if __name__ == "__main__":
-    print("Server active. Waiting for requests...")
-    app.run(host="0.0.0.0", port=8080)
+    print("Server active. Waiting for requests on port 52471...")
+    app.run(host="0.0.0.0", port=52471)
