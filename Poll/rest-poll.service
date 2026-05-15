@@ -1,5 +1,5 @@
 [Unit]
-Description=POLLING
+Description=Poll Service for RaspPi
 After=network.target
 
 [Service]
