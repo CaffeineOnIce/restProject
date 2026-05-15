@@ -5,9 +5,9 @@ After=network.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/REST
-Environment=PYTHONPATH=/REST
-ExecStart=/REST/.venv/bin/python3 /REST/script.py
+WorkingDirectory=/Tunnel
+Environment=PYTHONPATH=/Tunnel
+ExecStart=/Tunnel/.venv/bin/python3 /Tunnel/script.py
 Restart=always
 RestartSec=5
 
