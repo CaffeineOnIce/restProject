@@ -1,12 +1,12 @@
 # Where these should be placed?
 
-1. `script.py` -> Raspberry Pi  
+1. `script.py` -> Raspberry Pi (in /Tunnel)
 2. `esp32-bridge.service` -> Raspberry Pi (move to /etc/systemd/system)
    - Change path names in the code if necessary
 3. `zrok-tunnel.service` -> Raspberry Pi (move to /etc/systemd/system)
    - Change path names in the code if necessary
-4. `.env` -> Raspberry Pi  
-5. `requirements.txt` -> Raspberry Pi  
+4. `.env` -> Raspberry Pi (in /Tunnel)
+5. `requirements.txt` -> Raspberry Pi (in /Tunnel)
 6. `zrok-reset-run.sh` -> Raspberry Pi (move to /usr/local/bin)
 
 # Zrok steps
