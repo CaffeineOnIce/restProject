@@ -18,8 +18,8 @@ sudo chmod +x /usr/local/bin/zrok-reset-run.sh
 2. Install zrok2
    - Do not share right now
    - Do not install zrok agent
-3. Create zrok account
-4. Enable zrok environment
+3. Create zrok2 account
+4. Enable zrok2 environment
 5. For custom domain name:
 ```bash
 zrok2 create name <name>
