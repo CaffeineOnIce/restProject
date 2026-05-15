@@ -9,7 +9,7 @@
 5. `requirements.txt` -> Raspberry Pi (in /Tunnel)
 6. `zrok-reset-run.sh` -> Raspberry Pi (move to /usr/local/bin)
 
-# Zrok steps
+# Setup
 
 1. Run:
 ```bash
