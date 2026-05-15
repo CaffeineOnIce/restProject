@@ -36,8 +36,8 @@ sudo systemctl enable zrok-tunnel.service
 sudo systemctl start zrok-tunnel.service
 ```
 
-- Name used is `restapi`.
-- Port used is `52471`.
+- Name used is `restapi`
+- Port used is `52471`
 - Domain using zrok -> `restapi.shares.zrok.io`
 - Domain is reserved using zrok, so, others cannot use this domain unless we remove this from us ourselves.
 
