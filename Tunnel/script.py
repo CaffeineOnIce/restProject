@@ -7,7 +7,6 @@ from flask import Flask, jsonify
 load_dotenv(".env")
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
-# Ensure the URL is properly formatted with an HTTP prefix
 ESP32_URL = os.getenv("ESP32_URL", "esp32.local")
 if not ESP32_URL.startswith("http://") and not ESP32_URL.startswith("https://"):
     ESP32_URL = f"http://{ESP32_URL}"

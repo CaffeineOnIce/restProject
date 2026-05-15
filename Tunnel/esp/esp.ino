@@ -35,7 +35,12 @@ void handleTempHum() {
 
 void handleGas() {
   MQ135.update();
-  float gasVal = MQ135.readSensor();
+  
+  MQ135.setA(110.47);
+  MQ135.setB(-2.862);
+  
+  float gasVal = MQ135.readSensor() + 400;
+  
   String json = "{\"gas\":" + String(gasVal, 1) + "}";
   server.send(200, "application/json", json);
 }
@@ -43,6 +48,8 @@ void handleGas() {
 void setup() {
   Serial.begin(115200);
   dht.begin();
+
+  analogSetWidth(12);
 
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi");
@@ -59,11 +66,12 @@ void setup() {
     Serial.println("mDNS started: http://esp32.local");
   }
 
-  // MQ-135 Calibration Setup
+  // MQ-135 Setup
   MQ135.setRegressionMethod(1);
-  MQ135.setA(110.47);  // CO2 setup values
-  MQ135.setB(-2.862);
   MQ135.init();
+  
+  // Waveshare-specific: set load resistor to 4.7kΩ
+  MQ135.setRL(4.7);
 
   Serial.print("Calibrating MQ-135...");
   float calcR0 = 0;
