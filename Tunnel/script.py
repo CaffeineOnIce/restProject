@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 import os, time, requests, statistics
+from datetime import datetime, timezone
 from supabase import create_client
 from dotenv import load_dotenv
-from flask import Flask, jsonify 
+from flask import Flask, jsonify
 
 load_dotenv(".env")
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
@@ -13,13 +14,19 @@ if not ESP32_URL.startswith("http://") and not ESP32_URL.startswith("https://"):
 
 app = Flask(__name__)
 
+
 def handle_temp_hum(samples=5):
     temps, hums = [], []
     for _ in range(samples):
         try:
             resp = requests.get(f"{ESP32_URL}/temphum", timeout=5)
             data = resp.json()
-            if "temperature" in data and "humidity" in data:
+            if (
+                "temperature" in data
+                and "humidity" in data
+                and isinstance(data["temperature"], (int, float))
+                and isinstance(data["humidity"], (int, float))
+            ):
                 temps.append(data["temperature"])
                 hums.append(data["humidity"])
         except Exception as e:
@@ -31,13 +38,22 @@ def handle_temp_hum(samples=5):
             "status": "completed",
             "temp": round(statistics.mean(temps), 2),
             "hum": round(statistics.mean(hums), 2),
-            "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ")
+            "completed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
     else:
-        result = {"status": "error", "error_msg": "Insufficient sensor data", "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ")}
+        result = {
+            "status": "error",
+            "error_msg": "Insufficient sensor data",
+            "completed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
 
     supabase.table("temphum").insert(result).execute()
-    return {"temp": result.get("temp"), "hum": result.get("hum"), "status": result.get("status")}
+    return {
+        "temp": result.get("temp"),
+        "hum": result.get("hum"),
+        "status": result.get("status"),
+    }
+
 
 def handle_gas(samples=5):
     gas_readings = []
@@ -45,7 +61,7 @@ def handle_gas(samples=5):
         try:
             resp = requests.get(f"{ESP32_URL}/gas", timeout=5)
             data = resp.json()
-            if "gas" in data:
+            if "gas" in data and isinstance(data["gas"], (int, float)):
                 gas_readings.append(data["gas"])
         except Exception as e:
             print(f"Gas fetch error: {e}")
@@ -55,22 +71,29 @@ def handle_gas(samples=5):
         result = {
             "status": "completed",
             "gas": round(statistics.mean(gas_readings), 2),
-            "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ")
+            "completed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
     else:
-        result = {"status": "error", "error_msg": "Insufficient sensor data", "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ")}
+        result = {
+            "status": "error",
+            "error_msg": "Insufficient sensor data",
+            "completed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
 
     supabase.table("gasval").insert(result).execute()
     return {"gas": result.get("gas"), "status": result.get("status")}
+
 
 @app.route("/temphum", methods=["GET"])
 def api_temphum():
     return jsonify(handle_temp_hum())
 
+
 @app.route("/gas", methods=["GET"])
 def api_gas():
     return jsonify(handle_gas())
 
+
 if __name__ == "__main__":
     print("Server active. Waiting for requests on port 52471...")
-    app.run(host="0.0.0.0", port=52471)
+    app.run(host="0.0.0.0", port=52471, debug=False)
