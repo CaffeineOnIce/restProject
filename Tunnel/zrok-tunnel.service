@@ -1,7 +1,7 @@
 [Unit]
 Description=Zrok RestAPI Tunnel
-After=network-online.target esp32-bridge.service
-Wants=network-online.target
+After=network.target esp32-bridge.service
+Wants=network.target
 Requires=esp32-bridge.service
 
 [Service]
@@ -11,7 +11,7 @@ Environment=HOME=/root
 ExecStart=/usr/local/bin/zrok-reset-run.sh
 
 Restart=on-failure
-RestartSec=15
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
