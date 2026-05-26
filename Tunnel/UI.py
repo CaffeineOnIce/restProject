@@ -3,8 +3,8 @@ import requests
 import pandas as pd
 from datetime import datetime
 
-st.set_page_config(page_title="Edge Sensors", layout="wide")
-st.title("🌡️ Edge Sensor Dashboard")
+st.set_page_config(page_title="Dashboard", layout="wide")
+st.title("🌡️ Sensor Dashboard")
 
 BASE_URL = st.text_input("Zrok Endpoint", value="restapi.shares.zrok.io")
 
@@ -30,7 +30,7 @@ def render_temp_hum_section(url):
     if st.button("📥 Fetch Data", key="btn_temp", width='stretch'):
         with st.spinner("Fetching from edge device..."):
             try:
-                resp = requests.get(f"https://{url}/temphum", timeout=12)
+                resp = requests.get(f"https://{url}/temphum", timeout=15)
                 resp.raise_for_status()
                 data = resp.json()
 
@@ -64,7 +64,7 @@ def render_temp_hum_section(url):
             m1.metric("Temperature", f"{latest['Temp (°C)']:.2f} °C")
             m2.metric("Humidity", f"{latest['Humidity (%)']:.2f} %")
         else:
-            st.error(f"⚠️ Fetch Failed: {latest['Error']}")
+            st.error(f"Fetch Failed: {latest['Error']}")
     else:
         st.info("No data collected yet.")
 
@@ -117,7 +117,7 @@ def render_gas_section(url):
         if latest["Status"] == "Completed":
             st.metric("Air Quality", f"{latest['Gas (ppm)']:.2f} ppm")
         else:
-            st.error(f"⚠️ Fetch Failed: {latest['Error']}")
+            st.error(f"Fetch Failed: {latest['Error']}")
     else:
         st.info("No data collected yet.")
 
