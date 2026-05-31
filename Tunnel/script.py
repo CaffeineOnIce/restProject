@@ -1,87 +1,12 @@
-#!/usr/bin/env python3
-import os, time, requests, statistics
-from datetime import datetime, timezone
-from supabase import create_client
-from dotenv import load_dotenv
-from flask import Flask, jsonify
-
-load_dotenv(".env")
-supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
-
-ESP32_URL = os.getenv("ESP32_URL", "esp32.local")
-if not ESP32_URL.startswith("http://") and not ESP32_URL.startswith("https://"):
-    ESP32_URL = f"http://{ESP32_URL}"
+from flask import Flask, jsonify, request
+from datetime import datetime
+from fetch_temphum import handle_temp_hum
+from fetch_gas import handle_gas
+from collect_temp import collect_temp
+from collect_hum import collect_hum
+from collect_gas import collect_gas
 
 app = Flask(__name__)
-
-
-def handle_temp_hum(samples=5):
-    temps, hums = [], []
-    for _ in range(samples):
-        try:
-            resp = requests.get(f"{ESP32_URL}/temphum", timeout=5)
-            data = resp.json()
-            if (
-                "temperature" in data
-                and "humidity" in data
-                and isinstance(data["temperature"], (int, float))
-                and isinstance(data["humidity"], (int, float))
-            ):
-                temps.append(data["temperature"])
-                hums.append(data["humidity"])
-        except Exception as e:
-            print(f"Temp/Hum fetch error: {e}")
-        time.sleep(0.2)
-
-    if len(temps) >= 3:
-        result = {
-            "status": "completed",
-            "temp": round(statistics.mean(temps), 2),
-            "hum": round(statistics.mean(hums), 2),
-            "completed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        }
-    else:
-        result = {
-            "status": "error",
-            "error_msg": "Insufficient sensor data",
-            "completed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        }
-
-    supabase.table("temphum").insert(result).execute()
-    return {
-        "temp": result.get("temp"),
-        "hum": result.get("hum"),
-        "status": result.get("status"),
-    }
-
-
-def handle_gas(samples=5):
-    gas_readings = []
-    for _ in range(samples):
-        try:
-            resp = requests.get(f"{ESP32_URL}/gas", timeout=5)
-            data = resp.json()
-            if "gas" in data and isinstance(data["gas"], (int, float)):
-                gas_readings.append(data["gas"])
-        except Exception as e:
-            print(f"Gas fetch error: {e}")
-        time.sleep(0.2)
-
-    if len(gas_readings) >= 3:
-        result = {
-            "status": "completed",
-            "gas": round(statistics.mean(gas_readings), 2),
-            "completed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        }
-    else:
-        result = {
-            "status": "error",
-            "error_msg": "Insufficient sensor data",
-            "completed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        }
-
-    supabase.table("gasval").insert(result).execute()
-    return {"gas": result.get("gas"), "status": result.get("status")}
 
 
 @app.route("/temphum", methods=["GET"])
@@ -92,6 +17,68 @@ def api_temphum():
 @app.route("/gas", methods=["GET"])
 def api_gas():
     return jsonify(handle_gas())
+
+
+@app.route("/collect/temp", methods=["POST"])
+def api_collect_temp():
+    try:
+        data = request.get_json()
+        if not data or "duration" not in data or "interval" not in data:
+            return jsonify({"error": "Missing duration or interval"}), 400
+        duration = int(data["duration"])
+        interval = int(data["interval"])
+        if duration <= 0 or interval <= 0 or interval > duration:
+            return jsonify({"error": "Invalid duration/interval"}), 400
+
+        result = collect_temp(duration, interval)
+        return jsonify(result)
+    except ValueError:
+        return jsonify({"error": "Duration/interval must be integers"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/collect/hum", methods=["POST"])
+def api_collect_hum():
+    try:
+        data = request.get_json()
+        if not data or "duration" not in data or "interval" not in data:
+            return jsonify({"error": "Missing duration or interval"}), 400
+        duration = int(data["duration"])
+        interval = int(data["interval"])
+        if duration <= 0 or interval <= 0 or interval > duration:
+            return jsonify({"error": "Invalid duration/interval"}), 400
+
+        result = collect_hum(duration, interval)
+        return jsonify(result)
+    except ValueError:
+        return jsonify({"error": "Duration/interval must be integers"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/collect/gas", methods=["POST"])
+def api_collect_gas():
+    try:
+        data = request.get_json()
+        if not data or "duration" not in data or "interval" not in data:
+            return jsonify({"error": "Missing duration or interval"}), 400
+        duration = int(data["duration"])
+        interval = int(data["interval"])
+        if duration <= 0 or interval <= 0 or interval > duration:
+            return jsonify({"error": "Invalid duration/interval"}), 400
+
+        result = collect_gas(duration, interval)
+        return jsonify(result)
+    except ValueError:
+        return jsonify({"error": "Duration/interval must be integers"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/health")
+def health():
+    return jsonify({"status": "ok", "timestamp": datetime.now().isoformat()})
 
 
 if __name__ == "__main__":
