@@ -3,19 +3,15 @@ from datetime import datetime, timezone
 from fetch_temphum import handle_temp_hum
 
 
-def collect_hum(duration, interval):
+def collect_temphum(duration, interval):
     end_time = time.time() + duration
     samples = []
-    count = 0
-
     while time.time() < end_time:
         result = handle_temp_hum()
-        timestamp = datetime.now(timezone.utc).strftime("%H:%M:%S")
-
+        ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
         if result["status"] == "completed":
-            samples.append({"timestamp": timestamp, "value": result["hum"]})
-            count += 1
-
+            samples.append(
+                {"timestamp": ts, "temp": result["temp"], "hum": result["hum"]}
+            )
         time.sleep(interval)
-
     return samples

@@ -6,16 +6,10 @@ from fetch_gas import handle_gas
 def collect_gas(duration, interval):
     end_time = time.time() + duration
     samples = []
-    count = 0
-
     while time.time() < end_time:
         result = handle_gas()
-        timestamp = datetime.now(timezone.utc).strftime("%H:%M:%S")
-
+        ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
         if result["status"] == "completed":
-            samples.append({"timestamp": timestamp, "value": result["gas"]})
-            count += 1
-
+            samples.append({"timestamp": ts, "gas": result["gas"]})
         time.sleep(interval)
-
     return samples
