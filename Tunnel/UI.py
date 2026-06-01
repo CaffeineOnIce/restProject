@@ -9,10 +9,12 @@ st.markdown(
     """
     <style>
     :root{
-        --bg:#111318;
-        --border:rgba(255,255,255,.08);
-        --text:#e8edf2;
-        --muted:#a7b0bc;
+        --bg:#0F1419;
+        --bg-secondary:#1E2329;
+        --card:#161B22;
+        --border:rgba(255,255,255,0.08);
+        --text:#E6EDF3;
+        --muted:#8B949E;
     }
     html,body,[class*="css"]{
         background:var(--bg)!important;
@@ -20,17 +22,17 @@ st.markdown(
         font-size:17px;
     }
     .stApp{
-        background:linear-gradient(180deg,#111318 0%,#0f1217 100%);
+        background:linear-gradient(180deg,#0F1419 0%,#161B22 100%);
     }
     section[data-testid="stSidebar"]{
-        background:#0f1217;
+        background:var(--bg-secondary);
         border-right:1px solid var(--border);
     }
     .block-container{
         padding-top:1.2rem;
     }
     .card{
-        background:rgba(23,27,34,.88);
+        background:var(--card);
         border:1px solid var(--border);
         border-radius:18px;
         padding:18px;
@@ -57,19 +59,76 @@ st.markdown(
         letter-spacing:0.5px;
         margin-top:4px;
     }
+    .stButton > button[kind="primary"] {
+        background: #F3EFE0 !important;
+        border-color: #F3EFE0 !important;
+        color: #0F1419 !important;
+        font-weight: 600;
+    }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-st.title("🌡️ Sensor Dashboard")
-st.caption("Sensor monitoring and historical trends")
+
+def check_health(timeout=15):
+    try:
+        resp = requests.get(f"{BASE_URL}/health", timeout=timeout)
+        resp.raise_for_status()
+        data = resp.json()
+        return True, data.get("status", "OK")
+    except requests.exceptions.ConnectionError:
+        return False, "Connection failed"
+    except requests.exceptions.Timeout:
+        return False, "Timeout"
+    except Exception as e:
+        return False, str(e)
+
 
 BASE_URL = st.sidebar.text_input("Base URL", "https://restapi.shares.zrok.io").rstrip(
     "/"
 )
 
-# Persistent state for all logs and collections
+
+def show_colored_toast(message, color):
+    colors = {
+        "green": ("#238636", "#2ea043"),
+        "red": ("#da3633", "#f85149"),
+    }
+    bg, border = colors.get(color, ("#238636", "#2ea043"))
+    st.markdown(
+        f"""
+        <style>
+        [data-testid="stToast"] {{
+            background: {bg} !important;
+            border: 1px solid {border} !important;
+            color: #fff !important;
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.toast(message)
+
+
+st.markdown(
+    """
+    <div style="display: inline-flex; gap: 1rem">
+        <h1 style="margin: 0; font-size: 2.5rem;">Dashboard</h1>
+        <div id="health-btn-container"></div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+if st.button("STATUS", key="btn_health", type="primary"):
+    with st.spinner("Checking..."):
+        ok, msg = check_health()
+        if ok:
+            show_colored_toast("OK", "green")
+        else:
+            show_colored_toast("FAILED", "red")
+
 for k in [
     "temp_log",
     "hum_log",
@@ -93,124 +152,123 @@ def fetch_sensor(endpoint, field, timeout=20):
 
 
 def render_fetch_card(name, endpoint, field, unit, log_key):
-    st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown(
-        f'<div class="card-title">{name}</div><div class="card-subtitle">Live readings, history and trends</div>',
+        f'<div class="card-title">{name}</div>',
         unsafe_allow_html=True,
     )
 
-    left, right = st.columns([2, 1])
+    left, right = st.columns([1, 1])
     with left:
-        if st.button(f"📥 Fetch {name}", key=f"btn_{name}", use_container_width=True):
-            try:
-                val = fetch_sensor(endpoint, field)
-                st.session_state[log_key].insert(
-                    0,
-                    {
-                        "Time": datetime.now().strftime("%H:%M:%S"),
-                        "Value": val,
-                        "Status": "Completed",
-                        "Error": "",
-                    },
-                )
-            except Exception as e:
-                st.session_state[log_key].insert(
-                    0,
-                    {
-                        "Time": datetime.now().strftime("%H:%M:%S"),
-                        "Value": None,
-                        "Status": "Failed",
-                        "Error": str(e),
-                    },
-                )
+        if st.button(
+            f"Fetch {name}", key=f"btn_{name}", width="stretch", type="primary"
+        ):
+            with st.spinner(f"Fetching {name}..."):
+                try:
+                    val = fetch_sensor(endpoint, field)
+                    st.session_state[log_key].insert(
+                        0,
+                        {
+                            "Time": datetime.now().strftime("%H:%M:%S"),
+                            "Value": val,
+                            "Status": "Completed",
+                            "Error": "",
+                        },
+                    )
+                except Exception as e:
+                    st.session_state[log_key].insert(
+                        0,
+                        {
+                            "Time": datetime.now().strftime("%H:%M:%S"),
+                            "Value": None,
+                            "Status": "Failed",
+                            "Error": str(e),
+                        },
+                    )
             st.rerun()
     with right:
         logs = st.session_state[log_key]
         if logs and logs[0]["Status"] == "Completed":
-            st.metric(name, f"{logs[0]['Value']:.2f} {unit}")
+            st.metric(
+                name, f"{logs[0]['Value']:.2f} {unit}", label_visibility="collapsed"
+            )
         else:
-            st.metric(name, "—")
+            st.metric(name, "—", label_visibility="collapsed")
 
     logs = st.session_state[log_key]
     if logs:
         if logs[0]["Status"] == "Failed":
             st.error(logs[0]["Error"])
         valid = [r for r in logs if r["Status"] == "Completed"]
-        if valid:
-            st.line_chart(
-                pd.DataFrame(valid)[::-1].set_index("Time")[["Value"]],
-                use_container_width=True,
-            )
+
         cols = ["Time", "Value", "Status"] + (
             ["Error"] if any(r["Error"] for r in logs) else []
         )
         st.dataframe(
             pd.DataFrame(logs[:15])[cols].style.format({"Value": "{:.2f}"}, na_rep="—"),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
+
+        if valid:
+            st.line_chart(
+                pd.DataFrame(valid)[::-1].set_index("Time")[["Value"]],
+                width="stretch",
+            )
     else:
         st.info("No readings collected yet.")
     st.markdown("</div>", unsafe_allow_html=True)
 
 
 def render_collect_temphum():
-    st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown(
-        '<div class="card-title">Data Collection</div><div class="card-subtitle">Schedule repeated sensor acquisition</div>',
+        '<div class="card-title">Data Collection</div>',
         unsafe_allow_html=True,
     )
 
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3 = st.columns([1, 3, 1])
     with col1:
         duration = st.number_input(
             "Duration (seconds)", min_value=5, value=60, step=5, key="dur_th"
         )
-    with col2:
         interval = st.number_input(
             "Interval (seconds)", min_value=1, value=5, step=1, key="int_th"
         )
+        expected = max(1, duration // interval)
+    with col2:
+        m1, m2, m3 = st.columns(3)
+        with m1:
+            st.markdown(
+                f'<div class="big-metric" align="center">{expected}</div><div class="metric-label" align="center">Expected Samples</div>',
+                unsafe_allow_html=True,
+            )
+        with m2:
+            st.markdown(
+                f'<div class="big-metric" align="center">{interval}s</div><div class="metric-label" align="center">Frequency</div>',
+                unsafe_allow_html=True,
+            )
+        with m3:
+            st.markdown(
+                f'<div class="big-metric" align="center">{duration}s</div><div class="metric-label" align="center">Runtime</div>',
+                unsafe_allow_html=True,
+            )
+
     with col3:
-        st.metric("Sensor", "Temp + Hum")
-
-    expected = max(1, duration // interval)
-    st.divider()
-
-    m1, m2, m3 = st.columns(3)
-    with m1:
-        st.markdown(
-            f'<div class="big-metric">{expected}</div><div class="metric-label">Expected Samples</div>',
-            unsafe_allow_html=True,
-        )
-    with m2:
-        st.markdown(
-            f'<div class="big-metric">{interval}s</div><div class="metric-label">Frequency</div>',
-            unsafe_allow_html=True,
-        )
-    with m3:
-        st.markdown(
-            f'<div class="big-metric">{duration}s</div><div class="metric-label">Runtime</div>',
-            unsafe_allow_html=True,
-        )
-
-    st.divider()
-
-    if st.button("▶ Start Collection", key="btn_th", use_container_width=True):
-        with st.spinner("Starting collection..."):
-            try:
-                resp = requests.post(
-                    f"{BASE_URL}/ctemphum",
-                    json={"duration": duration, "interval": interval},
-                    timeout=duration + 300,
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                st.session_state["temphum_data"] = data
-                st.session_state["temphum_exp"] = expected
-                st.success(f"Collection completed ({len(data)} samples)")
-                st.rerun()
-            except Exception as e:
-                st.error(str(e))
+        if st.button("Start Collection", key="btn_th", width="stretch", type="primary"):
+            with st.spinner("Starting collection..."):
+                try:
+                    resp = requests.post(
+                        f"{BASE_URL}/ctemphum",
+                        json={"duration": duration, "interval": interval},
+                        timeout=duration + 300,
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                    st.session_state["temphum_data"] = data
+                    st.session_state["temphum_exp"] = expected
+                    st.success(f"Collection completed ({len(data)} samples)")
+                    st.rerun()
+                except Exception as e:
+                    st.error(str(e))
 
     data = st.session_state["temphum_data"]
     expected = st.session_state["temphum_exp"]
@@ -240,83 +298,80 @@ def render_collect_temphum():
             )
 
         st.divider()
-        if "temp" in df.columns:
-            st.subheader("Temperature")
-            st.line_chart(df.set_index("timestamp")["temp"], use_container_width=True)
-            st.dataframe(
-                df[["timestamp", "temp"]].style.format({"temp": "{:.2f}"}),
-                use_container_width=True,
-                hide_index=True,
-            )
-        if "hum" in df.columns:
-            st.subheader("Humidity")
-            st.line_chart(df.set_index("timestamp")["hum"], use_container_width=True)
-            st.dataframe(
-                df[["timestamp", "hum"]].style.format({"hum": "{:.2f}"}),
-                use_container_width=True,
-                hide_index=True,
-            )
+        met1, met2 = st.columns(2)
+        with met1:
+            if "temp" in df.columns:
+                st.subheader("Temperature")
+                st.dataframe(
+                    df[["timestamp", "temp"]].style.format({"temp": "{:.2f}"}),
+                    width="stretch",
+                    hide_index=True,
+                )
+                st.line_chart(df.set_index("timestamp")["temp"], width="stretch")
+
+        with met2:
+            if "hum" in df.columns:
+                st.subheader("Humidity")
+                st.dataframe(
+                    df[["timestamp", "hum"]].style.format({"hum": "{:.2f}"}),
+                    width="stretch",
+                    hide_index=True,
+                )
+                st.line_chart(df.set_index("timestamp")["hum"], width="stretch")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
 
 def render_collect_gas():
-    st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown(
-        '<div class="card-title">Data Collection</div><div class="card-subtitle">Schedule repeated sensor acquisition</div>',
+        '<div class="card-title">Data Collection</div>',
         unsafe_allow_html=True,
     )
 
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3 = st.columns([1, 3, 1])
     with col1:
         duration = st.number_input(
             "Duration (seconds)", min_value=5, value=60, step=5, key="dur_g"
         )
-    with col2:
         interval = st.number_input(
             "Interval (seconds)", min_value=1, value=5, step=1, key="int_g"
         )
+        expected = max(1, duration // interval)
+    with col2:
+        m1, m2, m3 = st.columns(3)
+        with m1:
+            st.markdown(
+                f'<div class="big-metric" align="center">{expected}</div><div class="metric-label" align="center">Expected Samples</div>',
+                unsafe_allow_html=True,
+            )
+        with m2:
+            st.markdown(
+                f'<div class="big-metric" align="center">{interval}s</div><div class="metric-label" align="center">Frequency</div>',
+                unsafe_allow_html=True,
+            )
+        with m3:
+            st.markdown(
+                f'<div class="big-metric" align="center">{duration}s</div><div class="metric-label" align="center">Runtime</div>',
+                unsafe_allow_html=True,
+            )
+
     with col3:
-        st.metric("Sensor", "Gas")
-
-    expected = max(1, duration // interval)
-    st.divider()
-
-    m1, m2, m3 = st.columns(3)
-    with m1:
-        st.markdown(
-            f'<div class="big-metric">{expected}</div><div class="metric-label">Expected Samples</div>',
-            unsafe_allow_html=True,
-        )
-    with m2:
-        st.markdown(
-            f'<div class="big-metric">{interval}s</div><div class="metric-label">Frequency</div>',
-            unsafe_allow_html=True,
-        )
-    with m3:
-        st.markdown(
-            f'<div class="big-metric">{duration}s</div><div class="metric-label">Runtime</div>',
-            unsafe_allow_html=True,
-        )
-
-    st.divider()
-
-    if st.button("▶ Start Collection", key="btn_g", use_container_width=True):
-        with st.spinner("Starting collection..."):
-            try:
-                resp = requests.post(
-                    f"{BASE_URL}/cgas",
-                    json={"duration": duration, "interval": interval},
-                    timeout=duration + 300,
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                st.session_state["gas_data"] = data
-                st.session_state["gas_exp"] = expected
-                st.success(f"Collection completed ({len(data)} samples)")
-                st.rerun()
-            except Exception as e:
-                st.error(str(e))
+        if st.button("Start Collection", key="btn_g", width="stretch", type="primary"):
+            with st.spinner("Starting collection..."):
+                try:
+                    resp = requests.post(
+                        f"{BASE_URL}/cgas",
+                        json={"duration": duration, "interval": interval},
+                        timeout=duration + 300,
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                    st.session_state["gas_data"] = data
+                    st.session_state["gas_exp"] = expected
+                    st.success(f"Collection completed ({len(data)} samples)")
+                    st.rerun()
+                except Exception as e:
+                    st.error(str(e))
 
     data = st.session_state["gas_data"]
     expected = st.session_state["gas_exp"]
@@ -346,12 +401,12 @@ def render_collect_gas():
 
         st.divider()
         if "gas" in df.columns:
-            st.line_chart(df.set_index("timestamp")["gas"], use_container_width=True)
             st.dataframe(
-                df.style.format({"gas": "{:.2f}"}),
-                use_container_width=True,
+                df[["timestamp", "gas"]].style.format({"gas": "{:.2f}"}),
+                width="stretch",
                 hide_index=True,
             )
+            st.line_chart(df.set_index("timestamp")["gas"], width="stretch")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -359,17 +414,12 @@ def render_collect_gas():
 # Navigation
 page = st.sidebar.radio(
     "Navigation",
-    ["Overview", "Temperature", "Humidity", "Gas", "Collect Temp+Hum", "Collect Gas"],
+    ["Overview", "Temperature", "Humidity", "Gas", "Temp/Hum Range", "Gas Range"],
 )
-st.sidebar.markdown("---")
-st.sidebar.caption("All data persists across tabs")
 
 if page == "Overview":
-    c1, c2 = st.columns(2)
-    with c1:
-        render_fetch_card("Temperature", "/temphum", "temp", "°C", "temp_log")
-    with c2:
-        render_fetch_card("Humidity", "/temphum", "hum", "%", "hum_log")
+    render_fetch_card("Temperature", "/temphum", "temp", "°C", "temp_log")
+    render_fetch_card("Humidity", "/temphum", "hum", "%", "hum_log")
     render_fetch_card("Gas", "/gas", "gas", "ppm", "gas_log")
 elif page == "Temperature":
     render_fetch_card("Temperature", "/temphum", "temp", "°C", "temp_log")
@@ -377,7 +427,7 @@ elif page == "Humidity":
     render_fetch_card("Humidity", "/temphum", "hum", "%", "hum_log")
 elif page == "Gas":
     render_fetch_card("Gas", "/gas", "gas", "ppm", "gas_log")
-elif page == "Collect Temp+Hum":
+elif page == "Temp/Hum Range":
     render_collect_temphum()
-elif page == "Collect Gas":
+elif page == "Gas Range":
     render_collect_gas()
