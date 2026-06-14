@@ -284,7 +284,7 @@ def render_collect_gas():
     col1, col2, col3 = st.columns([1, 3, 1])
     with col1:
         duration = st.number_input(
-            "Duration (seconds)", min_value=5, value=60, step=5, key="dur_g"
+            "Duration (seconds)", min_value=5, value=30, step=5, key="dur_g"
         )
         interval = st.number_input(
             "Interval (seconds)", min_value=1, value=5, step=1, key="int_g"
