@@ -7,7 +7,6 @@ from collect_gas import collect_gas
 
 app = Flask(__name__)
 
-
 @app.route("/temphum", methods=["GET"])
 def api_temphum():
     return jsonify(handle_temp_hum())

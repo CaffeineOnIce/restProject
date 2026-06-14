@@ -1,9 +1,11 @@
+#include <Arduino.h>
 #include <DHT.h>
 #include <ESPmDNS.h>
 #include <MQUnifiedsensor.h>
 #include <WebServer.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <WiFiMulti.h>
 
 #define placa "ESP32"
 #define Voltage_Resolution 3.3
@@ -18,14 +20,16 @@ MQUnifiedsensor MQ135(placa, Voltage_Resolution, ADC_Bit_Resolution, pin, type);
 DHT dht(DHTPIN, DHTTYPE);
 WebServer server(80);
 
-const char* ssid = "BoxRouter";
-const char* password = "routerBox1290";
-const char* hostname = "esp32"; 
+WiFiMulti wifiMulti;
+const uint32_t connectTimeoutMs = 10000;
+const char *hostname = "esp32";
 
-void handleTempHum() {
+void handleTempHum()
+{
   float t = dht.readTemperature();
   float h = dht.readHumidity();
-  if (isnan(t) || isnan(h)) {
+  if (isnan(t) || isnan(h))
+  {
     server.send(500, "application/json", "{\"error\":\"Sensor read failed\"}");
     return;
   }
@@ -33,35 +37,54 @@ void handleTempHum() {
   server.send(200, "application/json", json);
 }
 
-void handleGas() {
+void handleGas()
+{
   MQ135.update();
-  
+
   MQ135.setA(110.47);
   MQ135.setB(-2.862);
-  
+
   float gasVal = MQ135.readSensor() + 400;
-  
+
   String json = "{\"gas\":" + String(gasVal, 1) + "}";
   server.send(200, "application/json", json);
 }
 
-void setup() {
-  Serial.begin(115200);
-  dht.begin();
+void healthInfo()
+{
+  server.send(200, "application/json", "{\"status\":\"ok\"}");
+}
 
+void setup()
+{
+  Serial.begin(115200);
+
+  delay(2000);
+
+  dht.begin();
   analogSetWidth(12);
 
-  WiFi.begin(ssid, password);
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect(true);
+  delay(100);
+
+  wifiMulti.addAP("BoxRouter", "routerBox1290");
+  wifiMulti.addAP("TP-Link_3BCA", "65591574");
+
   Serial.print("Connecting to WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
+  while (wifiMulti.run() != WL_CONNECTED)
+  {
     delay(500);
     Serial.print(".");
   }
   Serial.println("\nConnected! IP: " + WiFi.localIP().toString());
 
-  if (!MDNS.begin(hostname)) {
+  if (!MDNS.begin(hostname))
+  {
     Serial.println("Error starting mDNS");
-  } else {
+  }
+  else
+  {
     MDNS.addService("http", "tcp", 80);
     Serial.println("mDNS started: http://esp32.local");
   }
@@ -69,13 +92,12 @@ void setup() {
   // MQ-135 Setup
   MQ135.setRegressionMethod(1);
   MQ135.init();
-  
-  // Waveshare-specific: set load resistor to 4.7kΩ
   MQ135.setRL(4.7);
 
   Serial.print("Calibrating MQ-135...");
   float calcR0 = 0;
-  for (int i = 1; i <= 10; i++) {
+  for (int i = 1; i <= 10; i++)
+  {
     MQ135.update();
     calcR0 += MQ135.calibrate(RatioMQ135CleanAir);
     Serial.print(".");
@@ -86,10 +108,18 @@ void setup() {
 
   server.on("/temphum", HTTP_GET, handleTempHum);
   server.on("/gas", HTTP_GET, handleGas);
+  server.on("/health", HTTP_GET, healthInfo);
   server.begin();
   Serial.println("HTTP server online.");
 }
 
-void loop() { 
-  server.handleClient(); 
+void loop()
+{
+  if (WiFi.status() != WL_CONNECTED)
+  {
+    Serial.println("WiFi disconnected. Reconnecting...");
+    wifiMulti.run(connectTimeoutMs);
+  }
+
+  server.handleClient();
 }

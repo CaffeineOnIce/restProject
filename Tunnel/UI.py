@@ -1,63 +1,52 @@
-import streamlit as st
-import requests
-import pandas as pd
 from datetime import datetime
+
+import pandas as pd
+import requests
+import streamlit as st
 
 st.set_page_config(page_title="Sensor Dashboard", layout="wide")
 
 st.markdown(
     """
     <style>
-    :root{
-        --bg:#0F1419;
-        --bg-secondary:#1E2329;
-        --card:#161B22;
-        --border:rgba(255,255,255,0.08);
-        --text:#E6EDF3;
-        --muted:#8B949E;
+    :root {
+        --bg: #0F1419;
+        --bg-secondary: #1E2329;
+        --card: #161B22;
+        --border: rgba(255,255,255,0.08);
+        --text: #E6EDF3;
+        --muted: #8B949E;
     }
-    html,body,[class*="css"]{
-        background:var(--bg)!important;
-        color:var(--text)!important;
-        font-size:17px;
+    html, body, [class*="css"] {
+        background: var(--bg) !important;
+        color: var(--text) !important;
+        font-size: 17px;
     }
-    .stApp{
-        background:linear-gradient(180deg,#0F1419 0%,#161B22 100%);
+    .stApp {
+        background: linear-gradient(180deg, #0F1419 0%, #161B22 100%);
     }
-    section[data-testid="stSidebar"]{
-        background:var(--bg-secondary);
-        border-right:1px solid var(--border);
+    section[data-testid="stSidebar"] {
+        background: var(--bg-secondary);
+        border-right: 1px solid var(--border);
     }
-    .block-container{
-        padding-top:1.2rem;
+    .block-container {
+        padding-top: 1.2rem;
     }
-    .card{
-        background:var(--card);
-        border:1px solid var(--border);
-        border-radius:18px;
-        padding:18px;
-        margin-bottom:16px;
+    .card-title {
+        font-size: 1.35rem;
+        font-weight: 700;
     }
-    .card-title{
-        font-size:1.35rem;
-        font-weight:700;
+    .big-metric {
+        font-size: 2.5rem;
+        font-weight: 800;
+        line-height: 1;
     }
-    .card-subtitle{
-        color:var(--muted);
-        font-size:.95rem;
-        margin-top:2px;
-    }
-    .big-metric{
-        font-size:2.5rem;
-        font-weight:800;
-        line-height:1;
-    }
-    .metric-label{
-        color:var(--muted);
-        font-size:0.85rem;
-        text-transform:uppercase;
-        letter-spacing:0.5px;
-        margin-top:4px;
+    .metric-label {
+        color: var(--muted);
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-top: 4px;
     }
     .stButton > button[kind="primary"] {
         background: #F3EFE0 !important;
@@ -70,64 +59,48 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-
-def check_health(timeout=15):
-    try:
-        resp = requests.get(f"{BASE_URL}/health", timeout=timeout)
-        resp.raise_for_status()
-        data = resp.json()
-        return True, data.get("status", "OK")
-    except requests.exceptions.ConnectionError:
-        return False, "Connection failed"
-    except requests.exceptions.Timeout:
-        return False, "Timeout"
-    except Exception as e:
-        return False, str(e)
-
-
 BASE_URL = st.sidebar.text_input("Base URL", "https://restapi.shares.zrok.io").rstrip(
     "/"
 )
 
 
-def show_colored_toast(message, color):
-    colors = {
-        "green": ("#238636", "#2ea043"),
-        "red": ("#da3633", "#f85149"),
-    }
-    bg, border = colors.get(color, ("#238636", "#2ea043"))
-    st.markdown(
-        f"""
-        <style>
-        [data-testid="stToast"] {{
-            background: {bg} !important;
-            border: 1px solid {border} !important;
-            color: #fff !important;
-        }}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.toast(message)
+def check_health(timeout=5):
+    try:
+        resp = requests.get(f"{BASE_URL}/health", timeout=timeout)
+        resp.raise_for_status()
+        return True, resp.json().get("status") == "ok"
+    except:
+        return False, "offline"
 
+
+def check_esp(timeout=5):
+    try:
+        resp = requests.get(f"{BASE_URL}/temphum", timeout=timeout)
+        resp.raise_for_status()
+        return True
+    except:
+        return False
+
+
+rasp_ok, _ = check_health()
+esp_ok = check_esp()
+
+system_ok = rasp_ok and esp_ok
+status_color = "#2ea043" if system_ok else "#f85149"
+status_text = "Online" if system_ok else "Offline"
 
 st.markdown(
-    """
-    <div style="display: inline-flex; gap: 1rem">
-        <h1 style="margin: 0; font-size: 2.5rem;">Dashboard</h1>
-        <div id="health-btn-container"></div>
+    f"""
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+        <h1 style="margin:0;font-size:2.5rem;">Dashboard</h1>
+        <div style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--text);">
+            <div style="width:12px;height:12px;border-radius:50%;background:{status_color};box-shadow:0 0 8px {status_color};"></div>
+            <span>{status_text}</span>
+        </div>
     </div>
     """,
     unsafe_allow_html=True,
 )
-
-if st.button("STATUS", key="btn_health", type="primary"):
-    with st.spinner("Checking..."):
-        ok, msg = check_health()
-        if ok:
-            show_colored_toast("OK", "green")
-        else:
-            show_colored_toast("FAILED", "red")
 
 for k in [
     "temp_log",
@@ -152,11 +125,7 @@ def fetch_sensor(endpoint, field, timeout=20):
 
 
 def render_fetch_card(name, endpoint, field, unit, log_key):
-    st.markdown(
-        f'<div class="card-title">{name}</div>',
-        unsafe_allow_html=True,
-    )
-
+    st.markdown(f'<div class="card-title">{name}</div>', unsafe_allow_html=True)
     left, right = st.columns([1, 1])
     with left:
         if st.button(
@@ -199,7 +168,6 @@ def render_fetch_card(name, endpoint, field, unit, log_key):
         if logs[0]["Status"] == "Failed":
             st.error(logs[0]["Error"])
         valid = [r for r in logs if r["Status"] == "Completed"]
-
         cols = ["Time", "Value", "Status"] + (
             ["Error"] if any(r["Error"] for r in logs) else []
         )
@@ -208,11 +176,9 @@ def render_fetch_card(name, endpoint, field, unit, log_key):
             width="stretch",
             hide_index=True,
         )
-
         if valid:
             st.line_chart(
-                pd.DataFrame(valid)[::-1].set_index("Time")[["Value"]],
-                width="stretch",
+                pd.DataFrame(valid)[::-1].set_index("Time")[["Value"]], width="stretch"
             )
     else:
         st.info("No readings collected yet.")
@@ -220,15 +186,11 @@ def render_fetch_card(name, endpoint, field, unit, log_key):
 
 
 def render_collect_temphum():
-    st.markdown(
-        '<div class="card-title">Data Collection</div>',
-        unsafe_allow_html=True,
-    )
-
+    st.markdown('<div class="card-title">Data Collection</div>', unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 3, 1])
     with col1:
         duration = st.number_input(
-            "Duration (seconds)", min_value=5, value=60, step=5, key="dur_th"
+            "Duration (seconds)", min_value=5, value=30, step=5, key="dur_th"
         )
         interval = st.number_input(
             "Interval (seconds)", min_value=1, value=5, step=1, key="int_th"
@@ -251,7 +213,6 @@ def render_collect_temphum():
                 f'<div class="big-metric" align="center">{duration}s</div><div class="metric-label" align="center">Runtime</div>',
                 unsafe_allow_html=True,
             )
-
     with col3:
         if st.button("Start Collection", key="btn_th", width="stretch", type="primary"):
             with st.spinner("Starting collection..."):
@@ -259,7 +220,7 @@ def render_collect_temphum():
                     resp = requests.post(
                         f"{BASE_URL}/ctemphum",
                         json={"duration": duration, "interval": interval},
-                        timeout=duration + 300,
+                        timeout=duration + 10000,
                     )
                     resp.raise_for_status()
                     data = resp.json()
@@ -270,13 +231,12 @@ def render_collect_temphum():
                 except Exception as e:
                     st.error(str(e))
 
-    data = st.session_state["temphum_data"]
-    expected = st.session_state["temphum_exp"]
+    data = st.session_state.get("temphum_data")
+    expected = st.session_state.get("temphum_exp")
     if data and expected:
         df = pd.DataFrame(data)
         actual = len(df)
         rate = (actual / expected * 100) if expected else 0
-
         st.divider()
         am1, am2, am3 = st.columns(3)
         with am1:
@@ -296,7 +256,6 @@ def render_collect_temphum():
                 f'<div class="big-metric">{avg_t} / {avg_h}</div><div class="metric-label">Avg Temp / Hum</div>',
                 unsafe_allow_html=True,
             )
-
         st.divider()
         met1, met2 = st.columns(2)
         with met1:
@@ -308,7 +267,6 @@ def render_collect_temphum():
                     hide_index=True,
                 )
                 st.line_chart(df.set_index("timestamp")["temp"], width="stretch")
-
         with met2:
             if "hum" in df.columns:
                 st.subheader("Humidity")
@@ -318,16 +276,11 @@ def render_collect_temphum():
                     hide_index=True,
                 )
                 st.line_chart(df.set_index("timestamp")["hum"], width="stretch")
-
     st.markdown("</div>", unsafe_allow_html=True)
 
 
 def render_collect_gas():
-    st.markdown(
-        '<div class="card-title">Data Collection</div>',
-        unsafe_allow_html=True,
-    )
-
+    st.markdown('<div class="card-title">Data Collection</div>', unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 3, 1])
     with col1:
         duration = st.number_input(
@@ -354,7 +307,6 @@ def render_collect_gas():
                 f'<div class="big-metric" align="center">{duration}s</div><div class="metric-label" align="center">Runtime</div>',
                 unsafe_allow_html=True,
             )
-
     with col3:
         if st.button("Start Collection", key="btn_g", width="stretch", type="primary"):
             with st.spinner("Starting collection..."):
@@ -362,7 +314,7 @@ def render_collect_gas():
                     resp = requests.post(
                         f"{BASE_URL}/cgas",
                         json={"duration": duration, "interval": interval},
-                        timeout=duration + 300,
+                        timeout=duration + 10000,
                     )
                     resp.raise_for_status()
                     data = resp.json()
@@ -373,13 +325,12 @@ def render_collect_gas():
                 except Exception as e:
                     st.error(str(e))
 
-    data = st.session_state["gas_data"]
-    expected = st.session_state["gas_exp"]
+    data = st.session_state.get("gas_data")
+    expected = st.session_state.get("gas_exp")
     if data and expected:
         df = pd.DataFrame(data)
         actual = len(df)
         rate = (actual / expected * 100) if expected else 0
-
         st.divider()
         am1, am2, am3 = st.columns(3)
         with am1:
@@ -398,7 +349,6 @@ def render_collect_gas():
                 f'<div class="big-metric">{avg}</div><div class="metric-label">Average Gas</div>',
                 unsafe_allow_html=True,
             )
-
         st.divider()
         if "gas" in df.columns:
             st.dataframe(
@@ -407,11 +357,9 @@ def render_collect_gas():
                 hide_index=True,
             )
             st.line_chart(df.set_index("timestamp")["gas"], width="stretch")
-
     st.markdown("</div>", unsafe_allow_html=True)
 
 
-# Navigation
 page = st.sidebar.radio(
     "Navigation",
     ["Overview", "Temperature", "Humidity", "Gas", "Temp/Hum Range", "Gas Range"],
