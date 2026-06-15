@@ -26,6 +26,10 @@ ui.add_css(
 :root { --bg: #0F1419; --bg-secondary: #1E2329; --card: #161B22; --border: rgba(255,255,255,0.08); --text: #E6EDF3; --muted: #8B949E; --primary: #F3EFE0; }
 body { background-color: var(--bg) !important; color: var(--text) !important; font-family: system-ui, sans-serif; font-size: 16px; }
 .nicegui-content { background: linear-gradient(180deg, #0F1419 0%, #161B22 100%); min-height: 100vh; }
+.q-field--outlined .q-field__control {
+    background-color: var(--bg-secondary) !important;
+    border-radius: 8px !important;
+}
 .q-drawer { background-color: var(--bg-secondary) !important; border-right: 1px solid var(--border) !important; }
 .q-header { background-color: var(--bg) !important; border-bottom: 1px solid var(--border) !important; color: var(--text) !important; }
 .q-card { background-color: var(--card) !important; border: 1px solid var(--border) !important; color: var(--text) !important; box-shadow: none !important; border-radius: 12px !important; }
@@ -398,7 +402,7 @@ def render_collect_card(sensor_type):
 @ui.page("/")
 def index():
     init_storage()
-    with ui.header().classes("h-16 items-center px-6"):
+    with ui.header().classes("h-20 items-center px-6"):
         ui.label("Sensor Dashboard").classes("text-2xl font-bold text-[var(--text)]")
         ui.space()
 
@@ -410,7 +414,11 @@ def index():
             "dark outlined bg-color=#1E2329"
         ).on_value_change(update_base_url)
 
-    content = ui.column().classes("w-full p-8 gap-8 max-w-7xl mx-auto")
+    main_container = ui.column().classes("w-full p-8 gap-8 max-w-7xl mx-auto")
+    with main_container:
+        render_status_header()
+        content = ui.column().classes("w-full gap-8")
+
     with ui.left_drawer(value=True).classes("p-4").props("width=250 elevated"):
         ui.label("Navigation").classes("text-lg font-bold mb-6 text-[var(--text)] px-2")
 
@@ -420,10 +428,23 @@ def index():
             "gas": ("Gas", "/gas", "gas", "ppm", "gas_log"),
         }
 
+        nav_buttons = {}
+
         def render_content(page_key):
+            # 1. Highlight the selected tab with a subtle dark grey
+            for key, btn in nav_buttons.items():
+                if key == page_key:
+                    # Selected state: Slight dark grey background, normal text, medium weight
+                    btn.classes(remove="bg-transparent text-[var(--muted)]")
+                    btn.classes(add="bg-[#252A31] text-[var(--text)] font-medium")
+                else:
+                    # Unselected state: Transparent, muted text
+                    btn.classes(remove="bg-[#252A31] font-medium")
+                    btn.classes(add="bg-transparent text-[var(--muted)]")
+
+            # 2. Render the page content
             content.clear()
             with content:
-                render_status_header()
                 if page_key == "overview":
                     with ui.row().classes("w-full gap-6 flex-wrap"):
                         for key in ["temp", "hum", "gas"]:
@@ -435,17 +456,24 @@ def index():
                 elif page_key == "gas_range":
                     render_collect_card("gas")
 
-        for label, key in [
+        menu_items = [
             ("Overview", "overview"),
             ("Temperature", "temp"),
             ("Humidity", "hum"),
             ("Gas", "gas"),
             ("Temp/Hum Range", "th_range"),
             ("Gas Range", "gas_range"),
-        ]:
-            ui.button(label, on_click=lambda k=key: render_content(k)).classes(
-                "w-full justify-start bg-transparent hover:bg-[var(--border)] text-[var(--text)] mb-2 h-10 text-left text-base"
+        ]
+
+        for label, key in menu_items:
+            btn = ui.button(label, on_click=lambda k=key: render_content(k))
+            # Set initial unselected classes (muted text, transparent bg)
+            btn.classes(
+                "w-full justify-start bg-transparent text-[var(--muted)] mb-2 h-10 text-left text-base"
             )
+            nav_buttons[key] = btn
+
+    # Initial render
     render_content("overview")
 
 
