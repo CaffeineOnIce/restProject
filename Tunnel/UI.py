@@ -5,6 +5,7 @@ import httpx
 import matplotlib.pyplot as plt
 from nicegui import ui, app, background_tasks
 
+# --- Matplotlib Theme ---
 plt.rcParams.update(
     {
         "figure.facecolor": "#161B22",
@@ -21,15 +22,19 @@ plt.rcParams.update(
 
 BASE_URL = "https://restapi.shares.zrok.io"
 
+# --- Theme ---
 ui.add_css(
     """
 :root { --bg: #0F1419; --bg-secondary: #1E2329; --card: #161B22; --border: rgba(255,255,255,0.08); --text: #E6EDF3; --muted: #8B949E; --primary: #F3EFE0; }
 body { background-color: var(--bg) !important; color: var(--text) !important; font-family: system-ui, sans-serif; font-size: 16px; }
 .nicegui-content { background: linear-gradient(180deg, #0F1419 0%, #161B22 100%); min-height: 100vh; }
+
+/* Fix for transparent input boxes */
 .q-field--outlined .q-field__control {
     background-color: var(--bg-secondary) !important;
     border-radius: 8px !important;
 }
+
 .q-drawer { background-color: var(--bg-secondary) !important; border-right: 1px solid var(--border) !important; }
 .q-header { background-color: var(--bg) !important; border-bottom: 1px solid var(--border) !important; color: var(--text) !important; }
 .q-card { background-color: var(--card) !important; border: 1px solid var(--border) !important; color: var(--text) !important; box-shadow: none !important; border-radius: 12px !important; }
@@ -89,7 +94,7 @@ def init_storage():
 
 # --- Unified Plot Helper ---
 def render_plot(x, y, title, color, rotation=90, bottom_margin=None):
-    plot = ui.matplotlib(figsize=(6, 4)).classes("w-full h-106")
+    plot = ui.matplotlib(figsize=(6, 4)).classes("w-full h-96")
     with plot.figure as fig:
         ax = fig.gca()
         ax.plot(x, y, marker="o", linestyle="-", color=color)
@@ -98,6 +103,143 @@ def render_plot(x, y, title, color, rotation=90, bottom_margin=None):
             ax.tick_params(axis="x", rotation=rotation)
         if bottom_margin:
             fig.subplots_adjust(bottom=bottom_margin, left=0.12, right=0.95, top=0.90)
+
+
+# --- Dashboard ---
+@ui.refreshable
+def render_overview():
+    with ui.row().classes("w-full justify-end mb-6"):
+
+        async def fetch_all():
+            for name, endpoint, field, unit, log_key in [
+                ("Temperature", "/temphum", "temp", "°C", "temp_log"),
+                ("Humidity", "/temphum", "hum", "%", "hum_log"),
+                ("Gas", "/gas", "gas", "ppm", "gas_log"),
+            ]:
+                try:
+                    val = await fetch_sensor(endpoint, field)
+                    app.storage.user[log_key].insert(
+                        0,
+                        {
+                            "Time": datetime.now().strftime("%H:%M:%S"),
+                            "Value": val,
+                            "Status": "Completed",
+                            "Error": "",
+                        },
+                    )
+                except Exception as e:
+                    app.storage.user[log_key].insert(
+                        0,
+                        {
+                            "Time": datetime.now().strftime("%H:%M:%S"),
+                            "Value": None,
+                            "Status": "Failed",
+                            "Error": str(e),
+                        },
+                    )
+            ui.notify("All sensors fetched!", type="positive")
+            render_overview.refresh()
+
+        ui.button("Fetch All Sensors", on_click=fetch_all).classes(
+            "custom-button px-6 h-10"
+        )
+
+    with ui.row().classes("w-full gap-6 flex-wrap"):
+        for name, log_key, unit, color in [
+            ("Temperature", "temp_log", "°C", "#58A6FF"),
+            ("Humidity", "hum_log", "%", "#3FB950"),
+            ("Gas", "gas_log", "ppm", "#D29922"),
+        ]:
+            logs = app.storage.user.get(log_key, [])
+            latest_val = (
+                f"{logs[0]['Value']:.2f}"
+                if logs and logs[0]["Status"] == "Completed"
+                else "—"
+            )
+            latest_time = logs[0]["Time"] if logs else "Never"
+
+            with ui.card().classes("flex-1 min-w-[250px] p-6"):
+                ui.label(name).classes(
+                    "text-lg font-bold text-[var(--muted)] uppercase tracking-wide"
+                )
+                ui.label(f"{latest_val} {unit}").style(f"color: {color}").classes(
+                    "text-5xl font-bold mt-2 leading-none"
+                )
+                ui.label(f"Last fetched: {latest_time}").classes(
+                    "text-sm text-[var(--muted)] mt-3"
+                )
+
+    with ui.row().classes("w-full gap-6 flex-wrap mt-6"):
+        for name, log_key, color in [
+            ("Temp Trend", "temp_log", "#58A6FF"),
+            ("Hum Trend", "hum_log", "#3FB950"),
+            ("Gas Trend", "gas_log", "#D29922"),
+        ]:
+            logs = app.storage.user.get(log_key, [])
+            valid_logs = [r for r in logs if r["Status"] == "Completed"][:10][::-1] 
+
+            with ui.card().classes("flex-1 min-w-[300px] p-4"):
+                ui.label(name).classes("text-md font-bold text-[var(--text)] mb-2")
+                if valid_logs:
+                    chart_df = pd.DataFrame(valid_logs).set_index("Time")[["Value"]]
+                    plot = ui.matplotlib(figsize=(4, 2)).classes("w-full h-45")
+                    with plot.figure as fig:
+                        ax = fig.gca()
+                        ax.plot(
+                            chart_df.index,
+                            chart_df["Value"],
+                            marker="o",
+                            color=color,
+                            linewidth=2,
+                            markersize=4,
+                        )
+                        ax.set_xticks([])
+                        ax.tick_params(axis="y", labelsize=8)
+                        fig.subplots_adjust(left=0.1, right=0.95, top=0.9, bottom=0.1)
+                else:
+                    ui.label("No data yet").classes(
+                        "text-[var(--muted)] italic h-32 flex items-center justify-center"
+                    )
+
+    with ui.row().classes("w-full gap-6 flex-wrap mt-6"):
+        th_data = app.storage.user.get("temphum_data")
+        with ui.card().classes("flex-1 min-w-[300px] p-6"):
+            ui.label("Last Temp/Hum Collection").classes(
+                "text-xl font-bold text-[var(--text)] mb-4"
+            )
+            if th_data:
+                df = pd.DataFrame(th_data)
+                with ui.row().classes("w-full justify-around"):
+                    for col, unit in [("temp", "°C"), ("hum", "%")]:
+                        if col in df.columns:
+                            with ui.column().classes("items-center"):
+                                ui.label(f"Avg: {df[col].mean():.1f}{unit}").classes(
+                                    "text-lg font-bold text-[var(--text)]"
+                                )
+                                ui.label(
+                                    f"Min: {df[col].min():.1f} | Max: {df[col].max():.1f}"
+                                ).classes("text-sm text-[var(--muted)]")
+            else:
+                ui.label("No collections yet.").classes("text-[var(--muted)] italic")
+
+        g_data = app.storage.user.get("gas_data")
+        with ui.card().classes("flex-1 min-w-[300px] p-6"):
+            ui.label("Last Gas Collection").classes(
+                "text-xl font-bold text-[var(--text)] mb-4"
+            )
+            if g_data:
+                df = pd.DataFrame(g_data)
+                if "gas" in df.columns:
+                    with ui.row().classes("w-full justify-around"):
+                        with ui.column().classes("items-center"):
+                            ui.label(f"Avg: {df['gas'].mean():.1f} ppm").classes(
+                                "text-lg font-bold text-[var(--text)]"
+                            )
+                            ui.label(
+                                f"Min: {df['gas'].min():.1f} | Max: {df['gas'].max():.1f}"
+                            ).classes("text-sm text-[var(--muted)]")
+            else:
+                ui.label("No collections yet.").classes("text-[var(--muted)] italic")
 
 
 # --- UI Components ---
@@ -431,24 +573,18 @@ def index():
         nav_buttons = {}
 
         def render_content(page_key):
-            # 1. Highlight the selected tab with a subtle dark grey
             for key, btn in nav_buttons.items():
                 if key == page_key:
-                    # Selected state: Slight dark grey background, normal text, medium weight
                     btn.classes(remove="bg-transparent text-[var(--muted)]")
                     btn.classes(add="bg-[#252A31] text-[var(--text)] font-medium")
                 else:
-                    # Unselected state: Transparent, muted text
                     btn.classes(remove="bg-[#252A31] font-medium")
                     btn.classes(add="bg-transparent text-[var(--muted)]")
 
-            # 2. Render the page content
             content.clear()
             with content:
                 if page_key == "overview":
-                    with ui.row().classes("w-full gap-6 flex-wrap"):
-                        for key in ["temp", "hum", "gas"]:
-                            render_fetch_card(*cards_config[key])
+                    render_overview()
                 elif page_key in cards_config:
                     render_fetch_card(*cards_config[page_key])
                 elif page_key == "th_range":
@@ -467,13 +603,11 @@ def index():
 
         for label, key in menu_items:
             btn = ui.button(label, on_click=lambda k=key: render_content(k))
-            # Set initial unselected classes (muted text, transparent bg)
             btn.classes(
                 "w-full justify-start bg-transparent text-[var(--muted)] mb-2 h-10 text-left text-base"
             )
             nav_buttons[key] = btn
 
-    # Initial render
     render_content("overview")
 
 
