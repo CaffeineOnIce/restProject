@@ -40,11 +40,14 @@ void handleTempHum()
 void handleGas()
 {
   MQ135.update();
-
-  MQ135.setA(110.47);
-  MQ135.setB(-2.862);
-
-  float gasVal = MQ135.readSensor() + 400;
+  float correctionFactor = 0; // Optional environmental correction
+  
+  // Configure the equation to calculate CO2 concentration value (Exact match to working code)
+  MQ135.setA(110.47); 
+  MQ135.setB(-2.862); 
+  
+  // Use false to prevent Serial printing during HTTP request (prevents ESP32 WebServer crashes/delays)
+  float gasVal = MQ135.readSensor(false, correctionFactor) + 400;
 
   String json = "{\"gas\":" + String(gasVal, 1) + "}";
   server.send(200, "application/json", json);
@@ -90,21 +93,36 @@ void setup()
   }
 
   // MQ-135 Setup
-  MQ135.setRegressionMethod(1);
-  MQ135.init();
+  MQ135.setRegressionMethod(1); //_PPM =  a*ratio^b
+  
+  // Configure the pin of arduino as input.
+  MQ135.init(); 
+  
+  // Set RL value (Kept your 4.7K assumption)
   MQ135.setRL(4.7);
 
-  Serial.print("Calibrating MQ-135...");
+  Serial.print("Calibrating please wait.");
   float calcR0 = 0;
   for (int i = 1; i <= 10; i++)
   {
-    MQ135.update();
+    MQ135.update(); // Update data, the arduino will read the voltage from the analog pin
     calcR0 += MQ135.calibrate(RatioMQ135CleanAir);
     Serial.print(".");
-    delay(100);
   }
   MQ135.setR0(calcR0 / 10);
-  Serial.println(" Done!");
+  Serial.println("  done!.");
+  
+  // Safety checks from the working example to catch wiring/hardware issues
+  if (isinf(calcR0)) {
+    Serial.println("Warning: Connection issue, R0 is infinite (Open circuit detected) please check your wiring and supply"); 
+    while (1);
+  }
+  if (calcR0 == 0) {
+    Serial.println("Warning: Connection issue found, R0 is zero (Analog pin shorts to ground) please check your wiring and supply"); 
+    while (1);
+  }
+  
+  Serial.println("** Values from MQ-135 **");
 
   server.on("/temphum", HTTP_GET, handleTempHum);
   server.on("/gas", HTTP_GET, handleGas);

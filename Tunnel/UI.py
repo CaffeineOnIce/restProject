@@ -24,7 +24,7 @@ body {
     background-color: var(--bg) !important; 
     color: var(--text) !important; 
     font-family: system-ui, sans-serif; 
-    font-size: 16px; 
+    font-size: 17px !important; 
     font-weight: bold !important; 
 }
 
@@ -70,12 +70,12 @@ body {
 .q-table th { 
     color: var(--muted) !important; 
     font-weight: 600 !important; 
-    font-size: 1.15rem !important; 
+    font-size: 1.2rem !important; 
     padding: 16px 16px !important;
 }
 
 .q-table td { 
-    font-size: 1.15rem !important;
+    font-size: 1.2rem !important; 
     padding: 16px 16px !important;
     border-bottom: 1px solid var(--border) !important; 
 }
@@ -86,7 +86,7 @@ body {
 
 .metric-label { 
     color: var(--muted); 
-    font-size: 1.2rem; 
+    font-size: 1.25rem; 
     text-transform: uppercase; 
     letter-spacing: 0.5px; 
     margin-top: 4px; 
@@ -99,7 +99,7 @@ body {
     font-weight: 600; 
     border-radius: 8px !important; 
     text-transform: none !important; 
-    font-size: 1.05rem !important; 
+    font-size: 1.1rem !important; 
     transition: all 0.2s ease; 
 }
 
@@ -129,14 +129,23 @@ def init_storage():
     for k in ["temp_log", "hum_log", "gas_log", "temphum_data", "gas_data", "temphum_exp", "gas_exp"]:
         app.storage.user.setdefault(k, [] if k.endswith("_log") else None)
 
-def render_plot(x, y, title, color, rotation=90, bottom_margin=None):
+def render_plot(x, y, title, color, xlabel="Time", ylabel="Value", rotation=90, bottom_margin=None):
     plot = ui.matplotlib(figsize=(6, 4)).classes("w-full h-96")
     with plot.figure as fig:
         ax = fig.gca()
         ax.plot(x, y, marker="o", linestyle="-", color=color)
-        ax.set_title(title, fontsize=12)
-        if rotation: ax.tick_params(axis="x", rotation=rotation)
-        if bottom_margin: fig.subplots_adjust(bottom=bottom_margin, left=0.12, right=0.95, top=0.90)
+        ax.set_title(title, fontsize=16, fontweight='bold')
+        ax.set_xlabel(xlabel, fontsize=14, fontweight='bold')
+        ax.set_ylabel(ylabel, fontsize=14, fontweight='bold')
+        
+        # Increase font sizes of the tick labels (grid values)
+        ax.tick_params(axis="x", rotation=rotation, labelsize=12)
+        ax.tick_params(axis="y", labelsize=12)
+        
+        if bottom_margin:
+            fig.subplots_adjust(bottom=bottom_margin, left=0.15, right=0.95, top=0.90)
+        else:
+            fig.subplots_adjust(bottom=0.15, left=0.15, right=0.95, top=0.90)
 
 def render_last_collection(title, data_key, metrics):
     with ui.card().classes("flex-1 min-w-[300px] p-6"):
@@ -151,7 +160,7 @@ def render_last_collection(title, data_key, metrics):
                             ui.label(f"Avg: {df[col].mean():.1f}{unit}").classes("text-lg font-bold text-[var(--text)]")
                             ui.label(f"Min: {df[col].min():.1f} | Max: {df[col].max():.1f}").classes("text-sm text-[var(--muted)]")
         else:
-            ui.label("No collections yet.").classes("text-[var(--muted)] italic")
+            ui.label("No collections yet.").classes("text-[var(--muted)] italic text-base")
 
 @ui.refreshable
 def render_overview():
@@ -160,7 +169,7 @@ def render_overview():
             fetch_all_btn.disable()
             fetch_all_btn.text = "Fetching All..."
             try:
-                for name, endpoint, field, unit, log_key in [("Temperature", "/temphum", "temp", "°C", "temp_log"), ("Humidity", "/temphum", "hum", "%", "hum_log"), ("Gas", "/gas", "gas", "ppm", "gas_log")]:
+                for name, endpoint, field, unit, log_key in [("Temperature", "/temphum", "temp", "°C", "temp_log"), ("Humidity", "/temphum", "hum", "%", "hum_log"), ("Carbon Dioxide", "/gas", "gas", "ppm", "gas_log")]:
                     try:
                         val = await fetch_sensor(endpoint, field)
                         app.storage.user[log_key].insert(0, {"Time": datetime.now().strftime("%H:%M:%S"), "Value": val, "Status": "Completed", "Error": ""})
@@ -172,21 +181,21 @@ def render_overview():
         fetch_all_btn = ui.button("Fetch All Sensors", on_click=fetch_all).classes("custom-button px-6 h-10")
 
     with ui.row().classes("w-full gap-6 flex-wrap"):
-        for name, log_key, unit, color in [("Temperature", "temp_log", "°C", "#58A6FF"), ("Humidity", "hum_log", "%", "#3FB950"), ("Gas", "gas_log", "ppm", "#D29922")]:
+        for name, log_key, unit, color in [("Temperature", "temp_log", "°C", "#58A6FF"), ("Humidity", "hum_log", "%", "#3FB950"), ("Carbon Dioxide", "gas_log", "ppm", "#D29922")]:
             logs = app.storage.user.get(log_key, [])
             latest_val = f"{logs[0]['Value']:.2f}" if logs and logs[0]["Status"] == "Completed" else "—"
             latest_time = logs[0]["Time"] if logs else "Never"
             with ui.card().classes("flex-1 min-w-[250px] p-6"):
                 ui.label(name).classes("text-lg font-bold text-[var(--muted)] uppercase tracking-wide")
                 ui.label(f"{latest_val} {unit}").style(f"color: {color}").classes("text-5xl font-bold mt-2 leading-none")
-                ui.label(f"Last fetched: {latest_time}").classes("text-sm text-[var(--muted)] mt-3")
+                ui.label(f"Last fetched: {latest_time}").classes("text-xl text-[var(--muted)] mt-3")
 
     with ui.row().classes("w-full gap-6 flex-wrap mt-6"):
-        for name, log_key, color in [("Temp Trend", "temp_log", "#58A6FF"), ("Hum Trend", "hum_log", "#3FB950"), ("Gas Trend", "gas_log", "#D29922")]:
+        for name, log_key, unit, color in [("Temp Trend", "temp_log", "°C", "#58A6FF"), ("Hum Trend", "hum_log", "%", "#3FB950"), ("CO2 Trend", "gas_log", "ppm", "#D29922")]:
             logs = app.storage.user.get(log_key, [])
-            valid_logs = [r for r in logs if r["Status"] == "Completed"][:10][::-1] 
+            valid_logs = [r for r in logs if r["Status"] == "Completed"][:15]
             with ui.card().classes("flex-1 min-w-[300px] p-4"):
-                ui.label(name).classes("text-md font-bold text-[var(--text)] mb-2")
+                ui.label(name).classes("text-xl font-bold text-[var(--text)] mb-2")
                 if valid_logs:
                     chart_df = pd.DataFrame(valid_logs).set_index("Time")[["Value"]]
                     plot = ui.matplotlib(figsize=(4, 2)).classes("w-full h-45")
@@ -194,32 +203,20 @@ def render_overview():
                         ax = fig.gca()
                         ax.plot(chart_df.index, chart_df["Value"], marker="o", color=color, linewidth=2, markersize=4)
                         ax.set_xticks([])
-                        ax.tick_params(axis="y", labelsize=8)
-                        fig.subplots_adjust(left=0.1, right=0.95, top=0.9, bottom=0.1)
+                        ax.set_xlabel("Time", fontsize=11, fontweight='bold')
+                        ax.set_ylabel(f"Value ({unit})", fontsize=11, fontweight='bold')
+                        ax.tick_params(axis="y", labelsize=10)
+                        fig.subplots_adjust(left=0.2, right=0.95, top=0.9, bottom=0.15)
                 else:
-                    ui.label("No data yet").classes("text-[var(--muted)] italic h-32 flex items-center justify-center")
+                    ui.label("No data yet").classes("text-xl font-bold text-[var(--muted)] italic h-32 flex items-center justify-center")
 
     with ui.row().classes("w-full gap-6 flex-wrap mt-6"):
         render_last_collection("Last Temp/Hum Collection", "temphum_data", [("temp", "°C"), ("hum", "%")])
-        render_last_collection("Last Gas Collection", "gas_data", [("gas", " ppm")])
-
-def render_status_header():
-    with ui.row().classes("w-full justify-between items-center mb-8"):
-        ui.label("Dashboard").classes("text-3xl font-bold m-0 text-[var(--text)]")
-        with ui.row().classes("items-center gap-3 px-4 py-2 bg-[var(--card)] border border-[var(--border)] rounded-lg"):
-            status_dot = ui.element("div").classes("w-3 h-3 rounded-full")
-            status_text = ui.label("Checking...").classes("text-[var(--text)] font-medium text-base")
-            async def update_status():
-                ok = await check_endpoint("/health") and await check_endpoint("/temphum")
-                color = "#2ea043" if ok else "#f85149"
-                status_dot.style(f"background-color: {color}; box-shadow: 0 0 8px {color}")
-                status_text.set_text("Online" if ok else "Offline")
-            ui.timer(5, update_status)
-            background_tasks.create(update_status())
+        render_last_collection("Last CO2 Collection", "gas_data", [("gas", " ppm")])
 
 def render_fetch_card(name, endpoint, field, unit, log_key):
     with ui.card().classes("w-full p-6"):
-        ui.label(name).classes("text-xl font-bold mb-6 text-[var(--text)]")
+        ui.label(name).classes("text-2xl font-bold mb-6 text-[var(--text)]")
         with ui.row().classes("w-full items-start gap-8"):
             with ui.column().classes("flex-1"):
                 btn = ui.button(f"Fetch {name}").classes("custom-button w-full h-12 text-lg")
@@ -237,55 +234,55 @@ def render_fetch_card(name, endpoint, field, unit, log_key):
                         refresh_display()
                 btn.on_click(on_fetch)
             with ui.column().classes("flex-1 items-end"):
-                metric_label = ui.label("—").classes("text-3xl font-bold text-[var(--text)] leading-none")
-                ui.label(unit).classes("metric-label mt-2")
-
+                metric_label = ui.label("—").classes("text-4xl font-bold text-[var(--text)] leading-none")
+        
         container = ui.column().classes("w-full mt-8")
         def refresh_display():
             container.clear()
             logs = app.storage.user[log_key]
             if not logs:
-                with container: ui.label("No readings collected yet.").classes("text-[var(--muted)] text-base italic")
-                metric_label.set_text("—")
+                with container: ui.label("No readings collected yet.").classes("text-[var(--muted)] text-xl italic")
+                metric_label.set_text(f"— {unit}")
                 return
             
             latest = logs[0]
-            metric_label.set_text(f"{latest['Value']:.2f}" if latest["Status"] == "Completed" else "Err")
+            
+            metric_label.set_text(f"{latest['Value']:.2f} {unit}" if latest["Status"] == "Completed" else f"Err {unit}")
             
             if latest["Status"] == "Failed" and latest["Error"]:
                 short_error = latest["Error"][:50] + "..." if len(latest["Error"]) > 50 else latest["Error"]
                 ui.notify(short_error, type="negative")
                 
                 with container:
-                    ui.label(short_error).classes("text-red-400 text-base mb-4 bg-red-900/20 p-3 rounded border border-red-900/50 w-full")
+                    ui.label(short_error).classes("text-red-400 text-xl mb-4 bg-red-900/20 p-3 rounded border border-red-900/50 w-full")
 
-            valid_logs = [r for r in logs if r["Status"] == "Completed"]
+            valid_logs = [r for r in logs if r["Status"] == "Completed"][:15]
             cols = ["Time", "Value", "Status"] + (["Error"] if any(r["Error"] for r in logs) else [])
             
             with container:
                 with ui.row().classes("w-full gap-6 items-start"):
                     with ui.column().classes("flex-1"):
-                        df_logs = pd.DataFrame(logs[:20])
+                        df_logs = pd.DataFrame(logs[:15])
                         if "Error" in df_logs.columns:
                             df_logs["Error"] = df_logs["Error"].apply(lambda x: str(x)[:40] + "..." if len(str(x)) > 40 else x)
                         
-                        ui.table.from_pandas(df_logs[cols]).props("dark flat").classes("w-full text-base")
+                        ui.table.from_pandas(df_logs[cols]).props("dark flat").classes("w-full text-lg")
                     
                     with ui.column().classes("flex-1"):
                         if valid_logs:
                             chart_df = pd.DataFrame(valid_logs)[::-1].set_index("Time")[["Value"]]
-                            render_plot(chart_df.index, chart_df["Value"], name, "#F3EFE0", rotation=90, bottom_margin=0.20)
+                            render_plot(chart_df.index, chart_df["Value"], name, "#F3EFE0", xlabel="Time", ylabel=f"{name} ({unit})", rotation=90, bottom_margin=0.20)
         refresh_display()
 
 def render_collect_card(sensor_type):
     is_th = sensor_type == "temphum"
-    title = f"Data Collection ({'Temp/Hum' if is_th else 'Gas'})"
+    title = f"Data Collection ({'Temp/Hum' if is_th else 'CO2'})"
     endpoint = "/ctemphum" if is_th else "/cgas"
     data_key, exp_key = ("temphum_data", "temphum_exp") if is_th else ("gas_data", "gas_exp")
-    metrics = [{"col": "temp", "title": "Temperature", "color": "#58A6FF", "unit": "°C"}, {"col": "hum", "title": "Humidity", "color": "#3FB950", "unit": "%"}] if is_th else [{"col": "gas", "title": "Gas Readings", "color": "#D29922", "unit": " ppm"}]
+    metrics = [{"col": "temp", "title": "Temperature", "color": "#58A6FF", "unit": "°C"}, {"col": "hum", "title": "Humidity", "color": "#3FB950", "unit": "%"}] if is_th else [{"col": "gas", "title": "CO2 Readings", "color": "#D29922", "unit": " ppm"}]
 
     with ui.card().classes("w-full p-6"):
-        ui.label(title).classes("text-xl font-bold mb-6 text-[var(--text)]")
+        ui.label(title).classes("text-2xl font-bold mb-6 text-[var(--text)]")
         with ui.row().classes("w-full items-center gap-8"):
             with ui.column().classes("gap-4"):
                 duration = ui.number(label="Duration (s)", value=30, min=5, step=1).classes("w-48 text-base").props("dark outlined")
@@ -295,13 +292,13 @@ def render_collect_card(sensor_type):
             
             with ui.row().classes("flex-1 justify-around items-center"):
                 with ui.column().classes("items-center"):
-                    expected_lbl = ui.label(str(calc_expected())).classes("text-6xl font-bold text-[var(--text)]")
+                    expected_lbl = ui.label(str(calc_expected())).classes("text-5xl font-bold text-[var(--text)]")
                     ui.label("Expected Samples").classes("metric-label")
                 with ui.column().classes("items-center"):
-                    freq_lbl = ui.label(f"{int(interval.value)}s").classes("text-6xl font-bold text-[var(--text)]")
+                    freq_lbl = ui.label(f"{int(interval.value)}s").classes("text-5xl font-bold text-[var(--text)]")
                     ui.label("Frequency").classes("metric-label")
                 with ui.column().classes("items-center"):
-                    runtime_lbl = ui.label(f"{int(duration.value)}s").classes("text-6xl font-bold text-[var(--text)]")
+                    runtime_lbl = ui.label(f"{int(duration.value)}s").classes("text-5xl font-bold text-[var(--text)]")
                     ui.label("Runtime").classes("metric-label")
             
             with ui.column().classes("items-center"):
@@ -364,7 +361,7 @@ def render_collect_card(sensor_type):
                 for m in metrics:
                     if m["col"] in df.columns:
                         with ui.card().classes("w-full p-4 mb-6"):
-                            ui.label(m["title"]).classes("text-xl font-bold mb-4 text-[var(--text)]")
+                            ui.label(m["title"]).classes("text-2xl font-bold mb-4 text-[var(--text)]")
                             with ui.row().classes("w-full justify-around mb-4 p-3 bg-[var(--bg-secondary)] rounded-lg"):
                                 for stat, val in [("Min", df[m["col"]].min()), ("Max", df[m["col"]].max()), ("Avg", df[m["col"]].mean())]:
                                     with ui.column().classes("items-center"):
@@ -372,9 +369,9 @@ def render_collect_card(sensor_type):
                                         ui.label(stat).classes("metric-label")
                             with ui.row().classes("w-full gap-6 items-start"):
                                 with ui.column().classes("flex-1"):
-                                    ui.table.from_pandas(df[["timestamp", m["col"]]]).props("dark flat").classes("w-full text-base")
+                                    ui.table.from_pandas(df[["timestamp", m["col"]]]).props("dark flat").classes("w-full text-lg")
                                 with ui.column().classes("flex-1"):
-                                    render_plot(df["timestamp"], df[m["col"]], m["title"], m["color"])
+                                    render_plot(df["timestamp"], df[m["col"]], m["title"], m["color"], xlabel="Timestamp", ylabel=f"{m['title']} ({m['unit'].strip()})")
         refresh_results()
 
 @ui.page("/")
@@ -382,6 +379,18 @@ def index():
     init_storage()
     with ui.header().classes("h-25 items-center px-6"):
         ui.label("Sensor Dashboard").classes("text-2xl font-bold text-[var(--text)]")
+        
+        with ui.row().classes("items-center gap-3 px-4 py-2 ml-4 bg-[var(--card)] border border-[var(--border)] rounded-lg"):
+            status_dot = ui.element("div").classes("w-3 h-3 rounded-full")
+            status_text = ui.label("Checking...").classes("text-[var(--text)] font-medium text-lg")
+            async def update_status():
+                ok = await check_endpoint("/health") and await check_endpoint("/temphum")
+                color = "#2ea043" if ok else "#f85149"
+                status_dot.style(f"background-color: {color}; box-shadow: 0 0 8px {color}")
+                status_text.set_text("Online" if ok else "Offline")
+            ui.timer(5, update_status)
+            background_tasks.create(update_status())
+
         ui.space()
         def update_base_url(e):
             global BASE_URL
@@ -390,12 +399,11 @@ def index():
 
     main_container = ui.column().classes("w-full p-8 gap-8 max-w-7xl mx-auto")
     with main_container:
-        render_status_header()
         content = ui.column().classes("w-full gap-8")
 
     with ui.left_drawer(value=True).classes("p-4").props("width=250 elevated"):
-        ui.label("Navigation").classes("text-lg font-bold mb-6 text-[var(--text)] px-2")
-        cards_config = {"temp": ("Temperature", "/temphum", "temp", "°C", "temp_log"), "hum": ("Humidity", "/temphum", "hum", "%", "hum_log"), "gas": ("Gas", "/gas", "gas", "ppm", "gas_log")}
+        ui.label("Navigation").classes("text-xl font-bold mb-6 text-[var(--text)] px-2")
+        cards_config = {"temp": ("Temperature", "/temphum", "temp", "°C", "temp_log"), "hum": ("Humidity", "/temphum", "hum", "%", "hum_log"), "gas": ("Carbon Dioxide", "/gas", "gas", "ppm", "gas_log")}
         nav_buttons = {}
         
         def render_content(page_key):
@@ -410,7 +418,7 @@ def index():
                 elif page_key in cards_config: render_fetch_card(*cards_config[page_key])
                 else: render_collect_card("temphum" if page_key == "th_range" else "gas")
 
-        menu_items = [("Overview", "overview"), ("Temperature", "temp"), ("Humidity", "hum"), ("Gas", "gas"), ("Temp/Hum Range", "th_range"), ("Gas Range", "gas_range")]
+        menu_items = [("Overview", "overview"), ("Temperature", "temp"), ("Humidity", "hum"), ("CO2", "gas"), ("Temp/Hum Range", "th_range"), ("CO2 Range", "gas_range")]
         for label, key in menu_items:
             btn = ui.button(label, on_click=lambda k=key: render_content(k))
             btn.classes("w-full justify-start bg-transparent text-[var(--muted)] mb-2 h-10 text-left text-base")
