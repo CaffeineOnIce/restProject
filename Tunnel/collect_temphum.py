@@ -1,17 +1,29 @@
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from fetch_temphum import handle_temp_hum
+
+# Define Indian Standard Time (UTC + 5:30)
+IST = timezone(timedelta(hours=5, minutes=30))
 
 
 def collect_temphum(duration, interval):
-    end_time = time.time() + duration
+    # Calculate exact number of samples needed
+    num_samples = int(duration / interval)
     samples = []
-    while time.time() < end_time:
+
+    # Use a for loop to guarantee exact sample count
+    for i in range(num_samples):
         result = handle_temp_hum()
-        ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
+        # Use IST instead of UTC
+        ts = datetime.now(IST).strftime("%H:%M:%S")
+
         if result["status"] == "completed":
             samples.append(
                 {"timestamp": ts, "temp": result["temp"], "hum": result["hum"]}
             )
-        time.sleep(interval)
+
+        # Sleep only if not the last iteration
+        if i < num_samples - 1:
+            time.sleep(interval)
+
     return samples

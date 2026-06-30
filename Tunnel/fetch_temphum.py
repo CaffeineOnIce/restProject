@@ -1,6 +1,9 @@
 import requests
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from config import ESP32_URL, supabase
+
+# Define Indian Standard Time (UTC + 5:30)
+IST = timezone(timedelta(hours=5, minutes=30))
 
 
 def handle_temp_hum():
@@ -16,7 +19,8 @@ def handle_temp_hum():
             and isinstance(data["temperature"], (int, float))
             and isinstance(data["humidity"], (int, float))
         ):
-            now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            # Use IST for database timestamp
+            now = datetime.now(IST).strftime("%Y-%m-%dT%H:%M:%S")
             result = {
                 "status": "completed",
                 "temp": round(data["temperature"], 2),
@@ -30,7 +34,7 @@ def handle_temp_hum():
                 "status": result["status"],
             }
         else:
-            now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            now = datetime.now(IST).strftime("%Y-%m-%dT%H:%M:%S")
             error_result = {
                 "status": "error",
                 "error_msg": "Invalid sensor data format",
@@ -39,7 +43,7 @@ def handle_temp_hum():
             supabase.table("temphum").insert(error_result).execute()
             return {"temp": None, "hum": None, "status": "error"}
     except Exception as e:
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        now = datetime.now(IST).strftime("%Y-%m-%dT%H:%M:%S")
         error_result = {
             "status": "error",
             "error_msg": str(e),

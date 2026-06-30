@@ -1,17 +1,20 @@
 import requests
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from config import ESP32_URL, supabase
+
+# Define Indian Standard Time (UTC + 5:30)
+IST = timezone(timedelta(hours=5, minutes=30))
 
 
 def handle_gas():
-    """Fetch ONE gas reading from ESP32 and save to Supabase."""
     try:
         resp = requests.get(f"{ESP32_URL}/gas", timeout=10)
         resp.raise_for_status()
         data = resp.json()
 
         if "gas" in data and isinstance(data["gas"], (int, float)):
-            now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            # Use IST for database timestamp
+            now = datetime.now(IST).strftime("%Y-%m-%dT%H:%M:%S")
             result = {
                 "status": "completed",
                 "gas": round(data["gas"], 2),
@@ -23,7 +26,7 @@ def handle_gas():
                 "status": result["status"],
             }
         else:
-            now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            now = datetime.now(IST).strftime("%Y-%m-%dT%H:%M:%S")
             error_result = {
                 "status": "error",
                 "error_msg": "Invalid sensor data format",
@@ -32,7 +35,7 @@ def handle_gas():
             supabase.table("gasval").insert(error_result).execute()
             return {"gas": None, "status": "error"}
     except Exception as e:
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        now = datetime.now(IST).strftime("%Y-%m-%dT%H:%M:%S")
         error_result = {
             "status": "error",
             "error_msg": str(e),

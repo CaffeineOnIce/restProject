@@ -40,13 +40,11 @@ void handleTempHum()
 void handleGas()
 {
   MQ135.update();
-  float correctionFactor = 0; // Optional environmental correction
+  float correctionFactor = 0;
   
-  // Configure the equation to calculate CO2 concentration value (Exact match to working code)
   MQ135.setA(110.47); 
   MQ135.setB(-2.862); 
   
-  // Use false to prevent Serial printing during HTTP request (prevents ESP32 WebServer crashes/delays)
   float gasVal = MQ135.readSensor(false, correctionFactor) + 400;
 
   String json = "{\"gas\":" + String(gasVal, 1) + "}";
