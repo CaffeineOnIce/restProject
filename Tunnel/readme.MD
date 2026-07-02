@@ -1,12 +1,10 @@
 # Where these should be placed?
 
-1. `script.py` -> Raspberry Pi (in /Tunnel)
+1. `script.py`, `requirements.txt`, `.env`, `collect_gas.py`, `collect_temphum.py`, `config.py`, `fetch_gas.py`, `fetch_temphum.py`-> Raspberry Pi (in /Tunnel)
 2. `esp32-bridge.service` -> Raspberry Pi (move to /etc/systemd/system)
    - Change path names in the code if necessary
 3. `zrok-tunnel.service` -> Raspberry Pi (move to /etc/systemd/system)
    - Change path names in the code if necessary
-4. `.env` -> Raspberry Pi (in /Tunnel)
-5. `requirements.txt` -> Raspberry Pi (in /Tunnel)
 6. `zrok-reset-run.sh` -> Raspberry Pi (move to /usr/local/bin)
 
 # Setup
@@ -43,11 +41,22 @@ sudo systemctl start zrok-tunnel.service
 
 # Steps
 
-## Calling
+## CLI
+
+### Fetch
 ```bash
-curl -sL restapi.shares.zrok.io/temphum | jq
+curl -sL restapi.shares.zrok.io/temphum | jq .
 ```
 - `/temphum` for temp and humidity  
 - `/gas` for gas  
+
+### Collect
+```bash
+curl -X POST https://restapi.shares.zrok.io/ctemphum \
+     -H "Content-Type: application/json" \
+     -d '{"duration": 30, "interval": 5}' | jq .
+```
+- `/ctemphum` for temp and humidity  
+- `/cgas` for gas  
 
 Outputs in JSON.
