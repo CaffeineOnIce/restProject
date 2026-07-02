@@ -63,7 +63,7 @@ curl -X POST https://restapi.shares.zrok.io/ctemphum \
 
 - Outputs **task-id**
 
-### Check for data
+### Check if task has finished
 ```bash
 curl https://restapi.shares.zrok.io/task/<task-id> | jq .                   
 ```
