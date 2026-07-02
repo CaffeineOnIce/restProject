@@ -61,7 +61,7 @@ curl -X POST https://restapi.shares.zrok.io/ctemphum \
 - `/ctemphum` for temp and humidity  
 - `/cgas` for gas
 
-- Outputs task-id
+- Outputs *task-id*
 
 ### Check for data
 ```bash
