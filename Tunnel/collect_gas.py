@@ -4,6 +4,7 @@ from fetch_gas import handle_gas
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
+
 def collect_gas(duration, interval):
     num_samples = int(duration / interval)
     samples = []

@@ -8,7 +8,6 @@ from collect_temphum import collect_temphum
 from collect_gas import collect_gas
 
 app = Flask(__name__)
-
 tasks = {}
 tasks_lock = threading.Lock()
 

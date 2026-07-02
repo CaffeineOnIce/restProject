@@ -19,7 +19,6 @@ def handle_temp_hum():
             and isinstance(data["temperature"], (int, float))
             and isinstance(data["humidity"], (int, float))
         ):
-            # Use IST for database timestamp
             now = datetime.now(IST).strftime("%Y-%m-%dT%H:%M:%S")
             result = {
                 "status": "completed",

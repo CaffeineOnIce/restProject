@@ -5,15 +5,13 @@ from config import ESP32_URL, supabase
 # Define Indian Standard Time (UTC + 5:30)
 IST = timezone(timedelta(hours=5, minutes=30))
 
-
 def handle_gas():
     try:
         resp = requests.get(f"{ESP32_URL}/gas", timeout=10)
         resp.raise_for_status()
         data = resp.json()
-
+        
         if "gas" in data and isinstance(data["gas"], (int, float)):
-            # Use IST for database timestamp
             now = datetime.now(IST).strftime("%Y-%m-%dT%H:%M:%S")
             result = {
                 "status": "completed",
