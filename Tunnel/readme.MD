@@ -49,13 +49,22 @@ curl -sL restapi.shares.zrok.io/temphum | jq .
 - `/temphum` for temp and humidity  
 - `/gas` for gas  
 
+Outputs in JSON.
+
 ## Collect
+### Start Task
 ```bash
 curl -X POST https://restapi.shares.zrok.io/ctemphum \
      -H "Content-Type: application/json" \
      -d '{"duration": 30, "interval": 5}' | jq .
 ```
 - `/ctemphum` for temp and humidity  
-- `/cgas` for gas  
+- `/cgas` for gas
 
+- Outputs task-id
+
+### Check for data
+```bash
+curl https://restapi.shares.zrok.io/task/<task-id> | jq .                   
+```
 Outputs in JSON.
