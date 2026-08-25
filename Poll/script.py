@@ -1,92 +1,88 @@
 #!/usr/bin/env python3
-import os, time, requests, statistics
+import os, time, requests, statistics, json
 from supabase import create_client
 from dotenv import load_dotenv
 
 load_dotenv(".env")
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
-
-ESP32_URL = os.getenv("ESP32_URL", "esp32.local")
+ESP32_URL = os.getenv("ESP32_URL", "http://esp32.local")
 POLL_INTERVAL = 2
 
-# --- SENSOR FETCHING FUNCTIONS ---
-def fetch_temp_hum(samples=5):
-    temps, hums = [], []
-    for _ in range(samples):
-        try:
-            resp = requests.get(f"{ESP32_URL}/temphum", timeout=5)
-            data = resp.json()
-            if "temperature" in data and "humidity" in data:
-                temps.append(data["temperature"])
-                hums.append(data["humidity"])
-        except Exception as e:
-            print(f"Error fetching Temp/Hum: {e}")
-        time.sleep(0.2)
-    
-    if len(temps) < 3: return None, None
-    return round(statistics.mean(temps), 2), round(statistics.mean(hums), 2)
+def fetch_single(endpoint):
+    try:
+        resp = requests.get(f"{ESP32_URL}{endpoint}", timeout=5)
+        return resp.json()
+    except Exception:
+        return None
 
-def fetch_gas(samples=5):
-    gas_readings = []
-    for _ in range(samples):
-        try:
-            resp = requests.get(f"{ESP32_URL}/gas", timeout=5)
-            data = resp.json()
-            if "gas" in data:
-                gas_readings.append(data["gas"])
-        except Exception as e:
-            print(f"Error fetching Gas: {e}")
-        time.sleep(0.2)
-    
-    if len(gas_readings) < 5: return None
-    return round(statistics.mean(gas_readings), 2)
-
-def process_temphum():
-    pending = supabase.table("temphum").select("*").eq("status", "pending").order("created_at").limit(1).execute().data
+def process_single_job(table, endpoint, field_map):
+    pending = supabase.table(table).select("*").eq("status", "pending").is_("duration", None).order("created_at").limit(1).execute().data
     if not pending: return
-
+    
     job = pending[0]
     job_id = job["id"]
-    supabase.table("temphum").update({"status": "processing"}).eq("id", job_id).execute()
+    supabase.table(table).update({"status": "processing"}).eq("id", job_id).execute()
+    
+    data = fetch_single(endpoint)
+    if data and "error" not in data:
+        update_payload = {"status": "completed", "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ")}
+        update_payload.update({k: data[v] for k, v in field_map.items()})
+        supabase.table(table).update(update_payload).eq("id", job_id).execute()
+    else:
+        supabase.table(table).update({"status": "error", "error_msg": "Sensor timeout", "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ")}).eq("id", job_id).execute()
 
-    t, h = fetch_temp_hum()
-    if t is not None:
-        supabase.table("temphum").update({
-            "status": "completed",
-            "temp": t,
-            "hum": h,
+def process_collection_job(table, endpoint, field_map):
+    # Look for jobs with a duration (Range Collection)
+    pending = supabase.table(table).select("*").eq("status", "pending").not_.is_("duration", None).order("created_at").limit(1).execute().data
+    if not pending: return
+    
+    job = pending[0]
+    job_id = job["id"]
+    duration = job.get("duration", 30)
+    interval = job.get("interval", 5)
+    num_samples = int(duration / interval)
+    
+    supabase.table(table).update({"status": "processing"}).eq("id", job_id).execute()
+    
+    samples = []
+    for i in range(num_samples):
+        data = fetch_single(endpoint)
+        if data and "error" not in data:
+            ts = time.strftime("%H:%M:%S")
+            sample = {"timestamp": ts}
+            sample.update({k: data[v] for k, v in field_map.items()})
+            samples.append(sample)
+        if i < num_samples - 1:
+            time.sleep(interval)
+            
+    if samples:
+        # Edge-Side Aggregation (Formulas from PDF)
+        stats = {}
+        for col in field_map.keys():
+            values = [s[col] for s in samples]
+            stats[col] = {
+                "min": min(values),
+                "max": max(values),
+                "avg": sum(values) / len(values)
+            }
+        supabase.table(table).update({
+            "status": "completed", 
+            "result_data": json.dumps({"samples": samples, "stats": stats}),
             "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ")
         }).eq("id", job_id).execute()
     else:
-        supabase.table("temphum").update({
-            "status": "error", "error_msg": "Sensor timeout", "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ")
-        }).eq("id", job_id).execute()
-
-def process_gas():
-    pending = supabase.table("gasval").select("*").eq("status", "pending").order("created_at").limit(1).execute().data
-    if not pending: return
-
-    job = pending[0]
-    job_id = job["id"]
-    supabase.table("gasval").update({"status": "processing"}).eq("id", job_id).execute()
-
-    g = fetch_gas()
-    if g is not None:
-        supabase.table("gasval").update({
-            "status": "completed",
-            "gas": g,
-            "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ")
-        }).eq("id", job_id).execute()
-    else:
-        supabase.table("gasval").update({
-            "status": "error", "error_msg": "Gas sensor timeout", "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ")
-        }).eq("id", job_id).execute()
+        supabase.table(table).update({"status": "error", "error_msg": "All samples failed", "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ")}).eq("id", job_id).execute()
 
 def main_loop():
     print("Cloud bridge active. Polling Supabase...")
+    th_map = {"temp": "temperature", "hum": "humidity"}
+    gas_map = {"gas": "gas"}
+    
     while True:
-        process_temphum()
-        process_gas()
+        process_single_job("temphum", "/temphum", th_map)
+        process_single_job("gasval", "/gas", gas_map)
+        process_collection_job("temphum", "/temphum", th_map)
+        process_collection_job("gasval", "/gas", gas_map)
         time.sleep(POLL_INTERVAL)
 
 if __name__ == "__main__":

@@ -1,0 +1,48 @@
+-- 1. Create 'temphum' table if it doesn't exist
+CREATE TABLE IF NOT EXISTS temphum (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    status TEXT DEFAULT 'pending',
+    temp FLOAT,
+    hum FLOAT,
+    error_msg TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    completed_at TIMESTAMP WITH TIME ZONE
+);
+
+-- 2. Add columns for Range Collection & Aggregation to 'temphum'
+-- These are required for the /cth endpoint and edge-side stats
+ALTER TABLE temphum ADD COLUMN IF NOT EXISTS duration INT;
+ALTER TABLE temphum ADD COLUMN IF NOT EXISTS interval INT;
+ALTER TABLE temphum ADD COLUMN IF NOT EXISTS result_data JSONB;
+
+-- 3. Create 'gasval' table if it doesn't exist
+CREATE TABLE IF NOT EXISTS gasval (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    status TEXT DEFAULT 'pending',
+    gas FLOAT,
+    error_msg TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    completed_at TIMESTAMP WITH TIME ZONE
+);
+
+-- 4. Add columns for Range Collection & Aggregation to 'gasval'
+ALTER TABLE gasval ADD COLUMN IF NOT EXISTS duration INT;
+ALTER TABLE gasval ADD COLUMN IF NOT EXISTS interval INT;
+ALTER TABLE gasval ADD COLUMN IF NOT EXISTS result_data JSONB;
+
+-- 5. Create Indexes for Performance
+-- Crucial for the RPi polling loop to quickly find 'pending' jobs
+CREATE INDEX IF NOT EXISTS idx_temphum_status ON temphum(status);
+CREATE INDEX IF NOT EXISTS idx_gasval_status ON gasval(status);
+CREATE INDEX IF NOT EXISTS idx_temphum_created ON temphum(created_at);
+CREATE INDEX IF NOT EXISTS idx_gasval_created ON gasval(created_at);
+
+-- 6. Enable Row Level Security (RLS) - Optional but Recommended
+-- For a student project, you might want to disable this for easier testing,
+-- but for production, you should create policies.
+ALTER TABLE temphum ENABLE ROW LEVEL SECURITY;
+ALTER TABLE gasval ENABLE ROW LEVEL SECURITY;
+
+-- Create a policy that allows all operations for now (since we are using a service role key in .env)
+CREATE POLICY "Enable all access for all users" ON temphum FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for all users" ON gasval FOR ALL USING (true) WITH CHECK (true);

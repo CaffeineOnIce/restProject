@@ -68,3 +68,60 @@ curl -X POST https://restapi.shares.zrok.io/ctemphum \
 curl https://restapi.shares.zrok.io/task/<task-id> | jq .                   
 ```
 Outputs in JSON.
+
+
+# Supabase
+## Temp/Humidity Table
+```sql
+CREATE TABLE temphum (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  status TEXT DEFAULT 'pending',
+  temp FLOAT,
+  hum FLOAT,
+  error_msg TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  completed_at TIMESTAMPTZ
+);
+
+-- RLS: Allow anon read/write for demo (restrict in prod)
+ALTER TABLE temphum ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "anon_access" ON temphum FOR ALL USING (true) WITH CHECK (true);
+```
+
+## Gas Table
+```sql
+CREATE TABLE gasval (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  status TEXT DEFAULT 'pending',
+  gas FLOAT,
+  error_msg TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  completed_at TIMESTAMPTZ
+);
+
+-- RLS: Allow anon read/write for demo (restrict in prod)
+ALTER TABLE gasval ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "anon_access" ON gasval FOR ALL USING (true) WITH CHECK (true);
+```
+
+## Additional Column Insertions
+```sql
+ALTER TABLE temphum 
+ADD COLUMN IF NOT EXISTS is_collection BOOLEAN DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS session_id TEXT,
+ADD COLUMN IF NOT EXISTS sample_index INTEGER;
+
+ALTER TABLE gasval 
+ADD COLUMN IF NOT EXISTS is_collection BOOLEAN DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS session_id TEXT,
+ADD COLUMN IF NOT EXISTS sample_index INTEGER;
+
+CREATE INDEX IF NOT EXISTS idx_temphum_collection ON temphum(session_id, sample_index);
+CREATE INDEX IF NOT EXISTS idx_gasval_collection ON gasval(session_id, sample_index); 
+```
+
+## .env File
+```
+SUPABASE_URL=<url>
+SUPABASE_KEY=<publishable key>
+```
