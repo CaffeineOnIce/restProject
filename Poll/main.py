@@ -11,7 +11,7 @@ supabase = create_client(os.environ.get("SUPABASE_URL"), os.environ.get("SUPABAS
 POLL_INTERVAL = 1
 TIMEOUT = 25
 
-# --- Single Fetch (Blocks until Edge completes) ---
+# --- Single Fetch ---
 @app.route("/th", methods=["POST"])
 def get_temp_hum():
     res = supabase.table("temphum").insert({"status": "pending"}).execute()
@@ -40,7 +40,7 @@ def get_gas():
     supabase.table("gasval").update({"status": "error", "error_msg": "Bridge Timeout"}).eq("id", job_id).execute()
     return jsonify({"error": "ESP32 did not respond in time"}), 504
 
-# --- Range Collection (Non-blocking, returns Task ID) ---
+# --- Range Collection ---
 @app.route("/cth", methods=["POST"])
 def collect_th():
     data = request.get_json()
@@ -63,7 +63,6 @@ def collect_gas():
 
 @app.route("/task/<task_id>", methods=["GET"])
 def get_task(task_id):
-    # Check both tables (simplified for example)
     for table in ["temphum", "gasval"]:
         res = supabase.table(table).select("*").eq("id", task_id).execute().data
         if res:

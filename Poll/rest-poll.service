@@ -5,7 +5,7 @@ After=network.target
 [Service]
 User=root
 WorkingDirectory=/Poll
-ExecStart=/Poll/.venv/bin/python3 /Poll/script.py
+ExecStart=/Poll/.venv/bin/python3/Poll/script.py
 Restart=always
 
 [Install]
