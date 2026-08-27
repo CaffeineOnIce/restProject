@@ -22,107 +22,86 @@ WiFiMulti wifiMulti;
 const uint32_t connectTimeoutMs = 10000;
 const char *hostname = "esp32";
 
-void handleTempHum()
-{
-    float t = dht.readTemperature();
-    float h = dht.readHumidity();
-    if (isnan(t) || isnan(h))
-    {
-        server.send(500, "application/json", "{\"error\":\"Sensor read failed\"}");
-        return;
-    }
-    String json = "{\"temperature\":" + String(t, 1) + ",\"humidity\":" + String(h, 1) + "}";
-    server.send(200, "application/json", json);
+void handleTempHum() {
+  float t = dht.readTemperature();
+  float h = dht.readHumidity();
+  if (isnan(t) || isnan(h)) {
+    server.send(500, "application/json", "{\"error\":\"Sensor read failed\"}");
+    return;
+  }
+  String json = "{\"temperature\":" + String(t, 1) + ",\"humidity\":" + String(h, 1) + "}";
+  server.send(200, "application/json", json);
 }
 
-void handleGas()
-{
+void handleGas() {
+  MQ135.update();
+  MQ135.setA(110.47);
+  MQ135.setB(-2.862);
+  float gasVal = MQ135.readSensor(false, 0) + 400;
+  if (isnan(gasVal) || isinf(gasVal)) {
+    server.send(500, "application/json", "{\"error\":\"Invalid gas reading\"}");
+    return;
+  }
+  String json = "{\"gas\":" + String(gasVal, 1) + "}";
+  server.send(200, "application/json", json);
+}
+
+void healthInfo() {
+  server.send(200, "application/json", "{\"status\":\"ok\"}");
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(2000);
+  dht.begin();
+  analogSetWidth(12);
+
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect(true);
+  delay(100);
+  wifiMulti.addAP("BoxRouter", "routerBox1290");
+  wifiMulti.addAP("TP-Link_3BCA", "65591574");
+
+  Serial.print("Connecting to WiFi");
+  while (wifiMulti.run() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nConnected! IP: " + WiFi.localIP().toString());
+
+  if (!MDNS.begin(hostname)) Serial.println("Error starting mDNS");
+  else MDNS.addService("http", "tcp", 80);
+
+  MQ135.setRegressionMethod(1);
+  MQ135.init();
+  MQ135.setRL(4.7);
+  Serial.print("Calibrating MQ-135...");
+  float calcR0 = 0;
+  for (int i = 1; i <= 10; i++) {
     MQ135.update();
-    float correctionFactor = 0;
-    MQ135.setA(110.47);
-    MQ135.setB(-2.862);
-    float gasVal = MQ135.readSensor(false, correctionFactor) + 400;
+    calcR0 += MQ135.calibrate(RatioMQ135CleanAir);
+    Serial.print(".");
+  }
+  MQ135.setR0(calcR0 / 10);
+  Serial.println(" Done!");
 
-    if (isnan(gasVal) || isinf(gasVal))
-    {
-        server.send(500, "application/json", "{\"error\":\"Invalid gas reading\"}");
-        return;
-    }
-    String json = "{\"gas\":" + String(gasVal, 1) + "}";
-    server.send(200, "application/json", json);
+  if (isinf(calcR0) || calcR0 == 0) {
+    Serial.println("Warning: Invalid R0. Check wiring.");
+    while (1);
+  }
+
+  server.on("/temphum", HTTP_GET, handleTempHum);
+  server.on("/gas", HTTP_GET, handleGas);
+  server.on("/health", HTTP_GET, healthInfo);
+  server.begin();
+  Serial.println("HTTP server online.");
 }
 
-void healthInfo()
-{
-    server.send(200, "application/json", "{\"status\":\"ok\"}");
-}
-
-void setup()
-{
-    Serial.begin(115200);
-    delay(2000);
-    dht.begin();
-    analogSetWidth(12);
-
-    WiFi.mode(WIFI_STA);
-    WiFi.disconnect(true);
-    delay(100);
-    wifiMulti.addAP("TowerBox 2.4", "routerBox1290");
-    wifiMulti.addAP("TP-Link_3BCA", "65591574");
-
-    Serial.print("Connecting to WiFi");
-    while (wifiMulti.run() != WL_CONNECTED)
-    {
-        delay(500);
-        Serial.print(".");
-    }
-    Serial.println("\nConnected! IP: " + WiFi.localIP().toString());
-
-    if (!MDNS.begin(hostname))
-    {
-        Serial.println("Error starting mDNS");
-    }
-    else
-    {
-        MDNS.addService("http", "tcp", 80);
-        Serial.println("mDNS started: http://esp32.local");
-    }
-
-    MQ135.setRegressionMethod(1);
-    MQ135.init();
-    MQ135.setRL(4.7);
-    Serial.print("Calibrating MQ-135...");
-    float calcR0 = 0;
-    for (int i = 1; i <= 10; i++)
-    {
-        MQ135.update();
-        calcR0 += MQ135.calibrate(RatioMQ135CleanAir);
-        Serial.print(".");
-    }
-    MQ135.setR0(calcR0 / 10);
-    Serial.println(" Done!");
-
-    if (isinf(calcR0) || calcR0 == 0)
-    {
-        Serial.println("Warning: Invalid R0. Check wiring.");
-        while (1)
-            ;
-    }
-
-    server.on("/temphum", HTTP_GET, handleTempHum);
-    server.on("/gas", HTTP_GET, handleGas);
-    server.on("/health", HTTP_GET, healthInfo);
-    server.begin();
-    Serial.println("HTTP server online.");
-}
-
-void loop()
-{
-    if (WiFi.status() != WL_CONNECTED)
-    {
-        Serial.println("WiFi disconnected. Reconnecting...");
-        wifiMulti.run(connectTimeoutMs);
-    }
-    server.handleClient();
-    delay(1); // Prevents watchdog timeout
+void loop() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi disconnected. Reconnecting...");
+    wifiMulti.run(connectTimeoutMs);
+  }
+  server.handleClient();
+  delay(1); // Prevents ESP32 watchdog timeout
 }

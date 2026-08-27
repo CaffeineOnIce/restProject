@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from nicegui import app, ui
 
-# Fixed: Removed trailing spaces in keys/values that break matplotlib
 plt.rcParams.update(
     {
         "figure.facecolor": "#161B22",
@@ -21,7 +20,7 @@ plt.rcParams.update(
     }
 )
 
-BASE_URL = "https://restproject-h1uq.onrender.com"
+BASE_URL = "https://restproject-inbd.onrender.com"
 
 ui.add_css(
     """
@@ -51,32 +50,7 @@ def render_plot(x, y, title, color):
         ax.set_title(title, fontsize=12)
         ax.tick_params(axis="x", rotation=90)
         fig.subplots_adjust(bottom=0.20, left=0.12, right=0.95, top=0.90)
-    plt.close(fig)  # Prevents memory leak in long-running apps
-
-
-def render_last_collection(title, data_key, stats_key, metrics):
-    with ui.card().classes("flex-1 min-w-[300px] p-6"):
-        ui.label(title).classes("text-2xl font-bold text-[var(--text)] mb-4")
-        data = app.storage.user.get(data_key)
-        stats = app.storage.user.get(stats_key) or {}
-        if data:
-            with ui.row().classes("w-full justify-around"):
-                for col, unit in metrics:
-                    col_stats = stats.get(col, {})
-                    if col_stats:
-                        with ui.column().classes("items-center"):
-                            ui.label(
-                                f"Avg: {col_stats.get('avg', 0):.1f} {unit}"
-                            ).classes("text-lg font-bold text-[var(--text)]")
-                            ui.label(
-                                f"Min: {col_stats.get('min', 0):.1f} | Max: {col_stats.get('max', 0):.1f}"
-                            ).classes("text-sm text-[var(--muted)]")
-                    else:
-                        ui.label("No collections yet.").classes(
-                            "text-[var(--muted)] italic"
-                        )
-        else:
-            ui.label("No collections yet.").classes("text-[var(--muted)] italic")
+    plt.close(fig)
 
 
 @ui.refreshable

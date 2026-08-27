@@ -40,16 +40,15 @@ def process_single_job(table, endpoint, field_map):
     if not pending:
         return
     job = pending[0]
-    job_id = job["id"]
-    supabase.table(table).update({"status": "processing"}).eq("id", job_id).execute()
+    supabase.table(table).update({"status": "processing"}).eq("id", job["id"]).execute()
     data = fetch_single(endpoint)
     if isinstance(data, dict) and "error" not in data:
-        update_payload = {
+        payload = {
             "status": "completed",
             "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
-        update_payload.update({k: data[v] for k, v in field_map.items()})
-        supabase.table(table).update(update_payload).eq("id", job_id).execute()
+        payload.update({k: data[v] for k, v in field_map.items()})
+        supabase.table(table).update(payload).eq("id", job["id"]).execute()
     else:
         supabase.table(table).update(
             {
@@ -57,7 +56,7 @@ def process_single_job(table, endpoint, field_map):
                 "error_msg": "Sensor timeout",
                 "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
             }
-        ).eq("id", job_id).execute()
+        ).eq("id", job["id"]).execute()
 
 
 def process_collection_job(table, endpoint, field_map):
@@ -74,21 +73,20 @@ def process_collection_job(table, endpoint, field_map):
     if not pending:
         return
     job = pending[0]
-    job_id = job["id"]
     duration = job.get("duration", 30)
-    interval = job.get("interval", 5)
-    num_samples = max(1, int(duration / interval))
-    supabase.table(table).update({"status": "processing"}).eq("id", job_id).execute()
+    interval = max(1, job.get("interval", 5))
+    num_samples = int(duration / interval)
+    supabase.table(table).update({"status": "processing"}).eq("id", job["id"]).execute()
     samples = []
     for i in range(num_samples):
         data = fetch_single(endpoint)
         if isinstance(data, dict) and "error" not in data:
-            ts = time.strftime("%H:%M:%S")
-            sample = {"timestamp": ts}
+            sample = {"timestamp": time.strftime("%H:%M:%S")}
             sample.update({k: data[v] for k, v in field_map.items()})
             samples.append(sample)
         if i < num_samples - 1:
             time.sleep(interval)
+
     if samples:
         stats = {}
         for col in field_map.keys():
@@ -104,7 +102,7 @@ def process_collection_job(table, endpoint, field_map):
                 "result_data": json.dumps({"samples": samples, "stats": stats}),
                 "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
             }
-        ).eq("id", job_id).execute()
+        ).eq("id", job["id"]).execute()
     else:
         supabase.table(table).update(
             {
@@ -112,7 +110,7 @@ def process_collection_job(table, endpoint, field_map):
                 "error_msg": "All samples failed",
                 "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
             }
-        ).eq("id", job_id).execute()
+        ).eq("id", job["id"]).execute()
 
 
 def main_loop():
