@@ -7,3 +7,4 @@ nicegui
 matplotlib
 pandas
 httpx
+flask-cors 
