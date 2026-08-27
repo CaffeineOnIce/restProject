@@ -1,11 +1,12 @@
 import asyncio
+import json
 from datetime import datetime
-
 import httpx
 import matplotlib.pyplot as plt
 import pandas as pd
-from nicegui import app, background_tasks, ui
+from nicegui import app, ui
 
+# Fixed: Removed trailing spaces in keys/values that break matplotlib
 plt.rcParams.update(
     {
         "figure.facecolor": "#161B22",
@@ -20,7 +21,6 @@ plt.rcParams.update(
     }
 )
 
-# Point to your Render Cloud API
 BASE_URL = "https://restproject-h1uq.onrender.com"
 
 ui.add_css(
@@ -38,7 +38,6 @@ body { background-color: var(--bg) !important; color: var(--text) !important; fo
 
 async def fetch_sensor(endpoint, timeout=30):
     async with httpx.AsyncClient() as client:
-        # Polling architecture uses POST for single fetches
         resp = await client.post(f"{BASE_URL}{endpoint}", timeout=timeout)
         resp.raise_for_status()
         return resp.json()
@@ -52,6 +51,7 @@ def render_plot(x, y, title, color):
         ax.set_title(title, fontsize=12)
         ax.tick_params(axis="x", rotation=90)
         fig.subplots_adjust(bottom=0.20, left=0.12, right=0.95, top=0.90)
+    plt.close(fig)  # Prevents memory leak in long-running apps
 
 
 def render_last_collection(title, data_key, stats_key, metrics):
@@ -71,6 +71,10 @@ def render_last_collection(title, data_key, stats_key, metrics):
                             ui.label(
                                 f"Min: {col_stats.get('min', 0):.1f} | Max: {col_stats.get('max', 0):.1f}"
                             ).classes("text-sm text-[var(--muted)]")
+                    else:
+                        ui.label("No collections yet.").classes(
+                            "text-[var(--muted)] italic"
+                        )
         else:
             ui.label("No collections yet.").classes("text-[var(--muted)] italic")
 
@@ -122,7 +126,6 @@ def render_overview():
     fetch_all_btn = ui.button("Fetch All Sensors", on_click=fetch_all).classes(
         "custom-button px-6 h-10"
     )
-
     with ui.row().classes("w-full gap-6 flex-wrap"):
         for name, log_key, unit, color in [
             ("Temperature", "temp_log", "°C", "#58A6FF"),
@@ -148,8 +151,8 @@ def render_collect_card(sensor_type):
     is_th = sensor_type == "temphum"
     title = f"Data Collection ({'Temp/Hum' if is_th else 'Gas'})"
     endpoint = "/cth" if is_th else "/cgas"
-    data_key, exp_key = (
-        ("temphum_data", "temphum_exp") if is_th else ("gas_data", "gas_exp")
+    data_key, stats_key = (
+        ("temphum_data", "temphum_stats") if is_th else ("gas_data", "gas_stats")
     )
     metrics = (
         [
@@ -175,7 +178,6 @@ def render_collect_card(sensor_type):
                 .classes("w-48 text-base")
                 .props("dark outlined")
             )
-
             btn = ui.button("Start Cloud Collection").classes(
                 "custom-button w-48 h-12 text-lg"
             )
@@ -185,7 +187,6 @@ def render_collect_card(sensor_type):
                 btn.text = "Dispatching to Edge..."
                 try:
                     async with httpx.AsyncClient() as client:
-                        # 1. Tell Cloud API to start collection
                         resp = await client.post(
                             f"{BASE_URL}{endpoint}",
                             json={
@@ -196,29 +197,22 @@ def render_collect_card(sensor_type):
                         )
                         resp.raise_for_status()
                         task_id = resp.json()["task_id"]
-
                         btn.text = "Edge Collecting..."
-                        # 2. Poll Cloud API for task completion
                         while True:
                             await asyncio.sleep(2)
                             status_resp = await client.get(
                                 f"{BASE_URL}/task/{task_id}", timeout=10
                             )
                             task_status = status_resp.json()
-
                             if task_status["status"] == "completed":
-                                # Parse the JSON string stored in Supabase by the Edge Worker
-                                import json
-
                                 result_data = (
                                     json.loads(task_status["result"])
                                     if isinstance(task_status["result"], str)
                                     else task_status["result"]
                                 )
                                 app.storage.user[data_key] = result_data["samples"]
-                                stats_key = "temphum_stats" if is_th else "gas_stats"
                                 app.storage.user[stats_key] = result_data["stats"]
-                                ui.notify(f"Collection completed", type="positive")
+                                ui.notify("Collection completed", type="positive")
                                 break
                             elif task_status["status"] == "error":
                                 raise Exception(
@@ -248,7 +242,6 @@ def render_collect_card(sensor_type):
                             ui.label(m["title"]).classes(
                                 "text-2xl font-bold mb-4 text-[var(--text)]"
                             )
-                            stats_key = "temphum_stats" if is_th else "gas_stats"
                             edge_stats = app.storage.user.get(stats_key, {}) or {}
                             col_stats = edge_stats.get(m["col"], {})
                             with ui.row().classes(
@@ -329,7 +322,6 @@ def index():
             ui.button(label, on_click=lambda k=key: render_content(k)).classes(
                 "w-full justify-start bg-transparent text-[var(--muted)] mb-2 h-10 text-left text-base"
             )
-
     render_content("overview")
 
 

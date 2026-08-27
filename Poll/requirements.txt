@@ -3,6 +3,7 @@ supabase
 flask
 gunicorn
 requests
-niceui
+nicegui
 matplotlib
 pandas
+httpx
