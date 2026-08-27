@@ -31,7 +31,7 @@ def process_single_job(table, endpoint, field_map):
         supabase.table(table)
         .select("*")
         .eq("status", "pending")
-        .filter("duration", "is", None)
+        .filter("duration", "is", "null")
         .order("created_at")
         .limit(1)
         .execute()
@@ -64,7 +64,7 @@ def process_collection_job(table, endpoint, field_map):
         supabase.table(table)
         .select("*")
         .eq("status", "pending")
-        .filter("duration", "not.is", None)
+        .filter("duration", "not.is", "null")
         .order("created_at")
         .limit(1)
         .execute()
@@ -86,7 +86,6 @@ def process_collection_job(table, endpoint, field_map):
             samples.append(sample)
         if i < num_samples - 1:
             time.sleep(interval)
-
     if samples:
         stats = {}
         for col in field_map.keys():
