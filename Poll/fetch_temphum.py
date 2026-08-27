@@ -4,6 +4,7 @@ from config import ESP32_URL, supabase
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
+
 def handle_temp_hum():
     """Fetch ONE temperature+humidity reading from ESP32 and save to Supabase."""
     try:
@@ -11,7 +12,12 @@ def handle_temp_hum():
         resp.raise_for_status()
         data = resp.json()
 
-        if "temperature" in data and "humidity" in data:
+        if (
+            "temperature" in data
+            and "humidity" in data
+            and isinstance(data["temperature"], (int, float))
+            and isinstance(data["humidity"], (int, float))
+        ):
             now = datetime.now(IST).strftime("%Y-%m-%dT%H:%M:%S")
             result = {
                 "status": "completed",
@@ -20,8 +26,22 @@ def handle_temp_hum():
                 "completed_at": now,
             }
             supabase.table("temphum").insert(result).execute()
-            return {"temp": result["temp"], "hum": result["hum"], "status": "completed"}
+            return {
+                "temp": result["temp"],
+                "hum": result["hum"],
+                "status": result["status"],
+            }
         else:
-            return {"temp": None, "hum": None, "status": "error", "error_msg": "Invalid data"}
+            now = datetime.now(IST).strftime("%Y-%m-%dT%H:%M:%S")
+            error_result = {
+                "status": "error",
+                "error_msg": "Invalid sensor data format",
+                "completed_at": now,
+            }
+            supabase.table("temphum").insert(error_result).execute()
+            return {"temp": None, "hum": None, "status": "error"}
     except Exception as e:
-        return {"temp": None, "hum": None, "status": "error", "error_msg": str(e)}
+        now = datetime.now(IST).strftime("%Y-%m-%dT%H:%M:%S")
+        error_result = {"status": "error", "error_msg": str(e), "completed_at": now}
+        supabase.table("temphum").insert(error_result).execute()
+        return {"temp": None, "hum": None, "status": "error"}
