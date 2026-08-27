@@ -59,7 +59,7 @@ void setup() {
   WiFi.mode(WIFI_STA);
   WiFi.disconnect(true);
   delay(100);
-  wifiMulti.addAP("BoxRouter", "routerBox1290");
+  wifiMulti.addAP("TowerBox 2.4", "routerBox1290");
   wifiMulti.addAP("TP-Link_3BCA", "65591574");
 
   Serial.print("Connecting to WiFi");
