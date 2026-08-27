@@ -1,0 +1,10 @@
+dotenv
+supabase
+flask
+gunicorn
+requests
+nicegui
+matplotlib
+pandas
+httpx
+flask-cors 
