@@ -1,12 +1,10 @@
 import asyncio
-import json
 from datetime import datetime
+import pandas as pd
 import httpx
 import matplotlib.pyplot as plt
-import pandas as pd
-from nicegui import app, ui, background_tasks
+from nicegui import ui, app, background_tasks
 
-# ✅ FIXED: Removed ALL trailing spaces
 plt.rcParams.update(
     {
         "figure.facecolor": "#161B22",
@@ -21,50 +19,110 @@ plt.rcParams.update(
     }
 )
 
-BASE_URL = "https://restproject-inbd.onrender.com"
+BASE_URL = "http://dietpi.local:52471"
 
 ui.add_css(
     """
-:root { --bg: #0F1419; --bg-secondary: #1E2329; --card: #161B22; --border: rgba(255,255,255,0.08); --text: #E6EDF3; --muted: #8B949E; --primary: #F3EFE0; }
-body { background-color: var(--bg) !important; color: var(--text) !important; font-family: system-ui, sans-serif; font-size: 16px; font-weight: bold !important; }
-.nicegui-content { background: linear-gradient(180deg, #0F1419 0%, #161B22 100%); min-height: 100vh; }
-.q-card { background-color: var(--card) !important; border: 1px solid var(--border) !important; color: var(--text) !important; box-shadow: none !important; border-radius: 12px !important; }
-.metric-label { color: var(--muted); font-size: 1.2rem; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; font-weight:bold; }
-.custom-button { background-color: var(--primary) !important; color: #0F1419 !important; font-weight: 600; border-radius: 8px !important; text-transform: none !important; font-size: 1.05rem !important; }
+:root {
+    --bg: #0F1419;
+    --bg-secondary: #1E2329;
+    --card: #161B22;
+    --border: rgba(255,255,255,0.08);
+    --text: #E6EDF3;
+    --muted: #8B949E;
+    --primary: #F3EFE0;
+}
+body {
+    background-color: var(--bg) !important;
+    color: var(--text) !important;
+    font-family: system-ui, sans-serif;
+    font-size: 16px;
+    font-weight: bold !important;
+}
+.nicegui-content {
+    background: linear-gradient(180deg, #0F1419 0%, #161B22 100%);
+    min-height: 100vh;
+}
+.q-field--outlined .q-field__control {
+    background-color: var(--bg-secondary) !important;
+    border-radius: 8px !important;
+    height: 64px !important
+}
+.q-drawer {
+    background-color: var(--bg-secondary) !important;
+    border-right: 1px solid var(--border) !important;
+}
+.q-header {
+    background-color: var(--bg) !important;
+    border-bottom: 1px solid var(--border) !important;
+    color: var(--text) !important;
+}
+.q-card {
+    background-color: var(--card) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--text) !important;
+    box-shadow: none !important;
+    border-radius: 12px !important;
+}
+.q-field__label, .q-field__native {
+    font-size: 20px !important;
+}
+.q-table {
+    background-color: transparent !important;
+    color: var(--text) !important;
+}
+.q-table th {
+    color: var(--muted) !important;
+    font-weight: 600 !important;
+    font-size: 1.15rem !important;
+    padding: 16px 16px !important;
+}
+.q-table td {
+    font-size: 1.15rem !important;
+    padding: 16px 16px !important;
+    border-bottom: 1px solid var(--border) !important;
+}
+.q-separator {
+    background-color: var(--border) !important;
+}
+.metric-label {
+    color: var(--muted);
+    font-size: 1.2rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 4px;
+    font-weight:bold;
+}
+.custom-button {
+    background-color: var(--primary) !important;
+    color: #0F1419 !important;
+    font-weight: 600;
+    border-radius: 8px !important;
+    text-transform: none !important;
+    font-size: 1.05rem !important;
+    transition: all 0.2s ease;
+}
+.custom-button:hover {
+    background-color: #e5e1d1 !important;
+    transform: translateY(-1px);
+}
 """,
     shared=True,
 )
 
 
-async def check_system_status(timeout=5):
-    """Checks Cloud API + ESP32 pipeline"""
-    cloud_ok = False
+async def check_endpoint(endpoint, timeout=15):
     try:
         async with httpx.AsyncClient() as client:
-            resp = await client.get(f"{BASE_URL}/health", timeout=timeout)
-            cloud_ok = resp.status_code == 200
+            resp = await client.get(f"{BASE_URL}{endpoint}", timeout=timeout)
+            return resp.json().get("status") == "ok" if endpoint == "/health" else True
     except Exception:
-        pass
-
-    esp_ok = False
-    if cloud_ok:
-        try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.post(f"{BASE_URL}/th", timeout=timeout + 5)
-                esp_ok = resp.status_code == 200
-        except Exception:
-            pass
-
-    if cloud_ok and esp_ok:
-        return "#2ea043", "All Systems Online"
-    if cloud_ok:
-        return "#f59e0b", "ESP32/Bridge Offline"
-    return "#f85149", "Cloud API Offline"
+        return False
 
 
-async def fetch_sensor(endpoint, field, timeout=30):
+async def fetch_sensor(endpoint, field, timeout=20):
     async with httpx.AsyncClient() as client:
-        resp = await client.post(f"{BASE_URL}{endpoint}", timeout=timeout)
+        resp = await client.get(f"{BASE_URL}{endpoint}", timeout=timeout)
         resp.raise_for_status()
         val = resp.json().get(field)
         if val is None:
@@ -79,6 +137,8 @@ def init_storage():
         "gas_log",
         "temphum_data",
         "gas_data",
+        "temphum_exp",
+        "gas_exp",
         "temphum_stats",
         "gas_stats",
     ]:
@@ -95,7 +155,6 @@ def render_plot(x, y, title, color, rotation=90, bottom_margin=None):
             ax.tick_params(axis="x", rotation=rotation)
         if bottom_margin:
             fig.subplots_adjust(bottom=bottom_margin, left=0.12, right=0.95, top=0.90)
-    plt.close(fig)
 
 
 def render_last_collection(title, data_key, stats_key, metrics):
@@ -122,17 +181,15 @@ def render_last_collection(title, data_key, stats_key, metrics):
 @ui.refreshable
 def render_overview():
     with ui.row().classes("w-full justify-between items-center mb-8"):
-        ui.label("Overview (Polling Architecture)").classes(
-            "text-4xl font-bold m-0 text-[var(--text)]"
-        )
+        ui.label("Overview").classes("text-4xl font-bold m-0 text-[var(--text)]")
 
         async def fetch_all():
             fetch_all_btn.disable()
-            fetch_all_btn.text = "Fetching via Cloud..."
+            fetch_all_btn.text = "Fetching All..."
             try:
                 for name, endpoint, field, unit, log_key in [
-                    ("Temperature", "/th", "temp", "°C", "temp_log"),
-                    ("Humidity", "/th", "hum", "%", "hum_log"),
+                    ("Temperature", "/temphum", "temp", "°C", "temp_log"),
+                    ("Humidity", "/temphum", "hum", "%", "hum_log"),
                     ("Gas", "/gas", "gas", "ppm", "gas_log"),
                 ]:
                     try:
@@ -156,15 +213,22 @@ def render_overview():
                                 "Error": str(e),
                             },
                         )
-                ui.notify("Cloud fetch complete", type="positive")
+
+                try:
+                    ui.notify("All sensors fetched", type="positive")
+                except RuntimeError:
+                    pass
             finally:
-                fetch_all_btn.enable()
-                fetch_all_btn.text = "Fetch All Sensors"
-                render_overview.refresh()
+                try:
+                    if not fetch_all_btn.is_deleted:
+                        render_overview.refresh()
+                except RuntimeError:
+                    pass
 
         fetch_all_btn = ui.button("Fetch All Sensors", on_click=fetch_all).classes(
             "custom-button px-6 h-10"
         )
+
     with ui.row().classes("w-full gap-6 flex-wrap"):
         for name, log_key, unit, color in [
             ("Temperature", "temp_log", "°C", "#58A6FF"),
@@ -178,6 +242,7 @@ def render_overview():
                 else "—"
             )
             latest_time = logs[0]["Time"] if logs else "Never"
+
             with ui.card().classes("flex-1 min-w-[250px] p-6"):
                 ui.label(name).classes(
                     "text-xl font-bold text-[var(--muted)] uppercase tracking-wide"
@@ -188,6 +253,7 @@ def render_overview():
                 ui.label(f"Last fetched: {latest_time}").classes(
                     "text-sm text-[var(--muted)] mt-3"
                 )
+
     with ui.row().classes("w-full gap-6 flex-wrap mt-6"):
         for name, log_key, color in [
             ("Temp Trend", "temp_log", "#58A6FF"),
@@ -196,6 +262,7 @@ def render_overview():
         ]:
             logs = app.storage.user.get(log_key, [])
             valid_logs = [r for r in logs if r["Status"] == "Completed"][:10][::-1]
+
             with ui.card().classes("flex-1 min-w-[300px] p-4"):
                 ui.label(name).classes("text-lg font-bold text-[var(--text)] mb-2")
                 if valid_logs:
@@ -218,6 +285,7 @@ def render_overview():
                     ui.label("No data yet").classes(
                         "text-[var(--muted)] italic h-32 flex items-center justify-center"
                     )
+
     with ui.row().classes("w-full gap-6 flex-wrap mt-6"):
         render_last_collection(
             "Last Temp/Hum Collection",
@@ -264,18 +332,26 @@ def render_fetch_card(name, endpoint, field, unit, log_key):
                             },
                         )
                     finally:
-                        btn.enable()
-                        btn.text = f"Fetch {name}"
-                        refresh_display()
+                        try:
+                            if not btn.is_deleted:
+                                btn.enable()
+                                btn.text = f"Fetch {name}"
+                                refresh_display()
+                        except RuntimeError:
+                            pass
 
                 btn.on_click(on_fetch)
+
             with ui.column().classes("flex-1 items-end"):
                 metric_label = ui.label("—").classes(
                     "text-3xl font-bold text-[var(--text)] leading-none"
                 )
+
         container = ui.column().classes("w-full mt-8")
 
         def refresh_display():
+            if container.is_deleted:
+                return
             container.clear()
             logs = app.storage.user[log_key]
             if not logs:
@@ -285,27 +361,35 @@ def render_fetch_card(name, endpoint, field, unit, log_key):
                     )
                 metric_label.set_text("—")
                 return
+
             latest = logs[0]
             metric_label.set_text(
                 f"{latest['Value']:.2f} {unit}"
                 if latest["Status"] == "Completed"
                 else "—"
             )
+
             if latest["Status"] == "Failed" and latest["Error"]:
                 short_error = (
                     latest["Error"][:50] + "..."
                     if len(latest["Error"]) > 50
                     else latest["Error"]
                 )
-                ui.notify(short_error, type="negative")
+                try:
+                    ui.notify(short_error, type="negative")
+                except RuntimeError:
+                    pass
+
                 with container:
                     ui.label(short_error).classes(
                         "text-red-400 text-base mb-4 bg-red-900/20 p-3 rounded border border-red-900/50 w-full"
                     )
+
             valid_logs = [r for r in logs if r["Status"] == "Completed"]
             cols = ["Time", "Value", "Status"] + (
                 ["Error"] if any(r["Error"] for r in logs) else []
             )
+
             with container:
                 with ui.row().classes("w-full gap-6 items-start"):
                     with ui.column().classes("flex-1"):
@@ -314,9 +398,11 @@ def render_fetch_card(name, endpoint, field, unit, log_key):
                             df_logs["Error"] = df_logs["Error"].apply(
                                 lambda x: str(x)[:40] + "..." if len(str(x)) > 40 else x
                             )
+
                         ui.table.from_pandas(df_logs[cols]).props("dark flat").classes(
                             "w-full text-base"
                         )
+
                     with ui.column().classes("flex-1"):
                         if valid_logs:
                             chart_df = pd.DataFrame(valid_logs)[::-1].set_index("Time")[
@@ -337,9 +423,9 @@ def render_fetch_card(name, endpoint, field, unit, log_key):
 def render_collect_card(sensor_type):
     is_th = sensor_type == "temphum"
     title = f"Data Collection ({'Temp/Hum' if is_th else 'Gas'})"
-    endpoint = "/cth" if is_th else "/cgas"
-    data_key, stats_key = (
-        ("temphum_data", "temphum_stats") if is_th else ("gas_data", "gas_stats")
+    endpoint = "/ctemphum" if is_th else "/cgas"
+    data_key, exp_key = (
+        ("temphum_data", "temphum_exp") if is_th else ("gas_data", "gas_exp")
     )
     metrics = (
         [
@@ -351,6 +437,7 @@ def render_collect_card(sensor_type):
             {"col": "gas", "title": "Gas Readings", "color": "#D29922", "unit": "ppm"}
         ]
     )
+
     with ui.card().classes("w-full p-6"):
         ui.label(title).classes("text-2xl font-bold mb-6 text-[var(--text)]")
         with ui.row().classes("w-full items-center gap-8"):
@@ -387,8 +474,9 @@ def render_collect_card(sensor_type):
                         f"{int(duration.value)}s" if duration.value is not None else "—"
                     ).classes("text-6xl font-bold text-[var(--text)]")
                     ui.label("Runtime").classes("metric-label")
+
             with ui.column().classes("items-center"):
-                btn = ui.button("Start Cloud Collection").classes(
+                btn = ui.button("Start Collection").classes(
                     "custom-button w-48 h-12 text-lg"
                 )
 
@@ -406,71 +494,115 @@ def render_collect_card(sensor_type):
 
             async def start_collection():
                 btn.disable()
-                btn.text = "Dispatching to Edge..."
+                btn.text = "Starting..."
+
+                d_val = duration.value if duration.value is not None else 30
+                i_val = interval.value if interval.value is not None else 5
+
                 try:
                     async with httpx.AsyncClient() as client:
                         resp = await client.post(
                             f"{BASE_URL}{endpoint}",
-                            json={
-                                "duration": duration.value,
-                                "interval": interval.value,
-                            },
+                            json={"duration": d_val, "interval": i_val},
                             timeout=10,
                         )
                         resp.raise_for_status()
-                        task_id = resp.json()["task_id"]
-                        btn.text = "Edge Collecting..."
+                        start_data = resp.json()
+                        if start_data.get("status") != "started":
+                            raise Exception(start_data.get("error", "Failed"))
+
+                        task_id = start_data["task_id"]
+                        btn.text = "Collecting..."
+
                         while True:
                             await asyncio.sleep(2)
                             status_resp = await client.get(
                                 f"{BASE_URL}/task/{task_id}", timeout=10
                             )
+                            status_resp.raise_for_status()
                             task_status = status_resp.json()
+
                             if task_status["status"] == "completed":
-                                result_data = (
-                                    json.loads(task_status["result"])
-                                    if isinstance(task_status["result"], str)
-                                    else task_status["result"]
-                                )
+                                result_data = task_status["result"]
+
                                 app.storage.user[data_key] = result_data["samples"]
+
+                                stats_key = "temphum_stats" if is_th else "gas_stats"
                                 app.storage.user[stats_key] = result_data["stats"]
-                                ui.notify(
-                                    f"Collection completed ({len(result_data['samples'])} samples)",
-                                    type="positive",
-                                )
+
+                                app.storage.user[exp_key] = calc_expected()
+
+                                try:
+                                    ui.notify(
+                                        f"Collection completed ({len(result_data['samples'])} samples)",
+                                        type="positive",
+                                    )
+                                except RuntimeError:
+                                    pass
                                 break
                             elif task_status["status"] == "error":
                                 raise Exception(
-                                    task_status.get("error", "Edge task failed")
+                                    task_status.get("error", "Background task failed")
                                 )
                 except Exception as e:
-                    ui.notify(str(e), type="negative")
+                    try:
+                        ui.notify(str(e), type="negative")
+                    except RuntimeError:
+                        pass
                 finally:
-                    btn.enable()
-                    btn.text = "Start Cloud Collection"
-                    refresh_results()
+                    try:
+                        if not btn.is_deleted:
+                            btn.enable()
+                            btn.text = "Start Collection"
+                            refresh_results()
+                    except RuntimeError:
+                        pass
 
             btn.on_click(start_collection)
+
         results_container = ui.column().classes("w-full mt-8")
 
         def refresh_results():
+            if results_container.is_deleted:
+                return
             results_container.clear()
             data = app.storage.user.get(data_key)
+            expected = app.storage.user.get(exp_key, 1)
             if not data:
                 return
+
             df = pd.DataFrame(data)
+            actual, rate = len(df), (len(df) / expected * 100) if expected else 0
+
             with results_container:
+                ui.separator().classes("bg-[var(--border)] mb-6")
+                with ui.row().classes("w-full justify-center gap-16 mb-6"):
+                    for val, lbl in [
+                        (str(actual), "Actual Samples"),
+                        (f"{rate:.0f}%", "Success Rate"),
+                    ]:
+                        with ui.column().classes("items-center"):
+                            ui.label(val).classes(
+                                "text-2xl font-bold text-[var(--text)]"
+                            )
+                            ui.label(lbl).classes("metric-label")
+
+                ui.separator().classes("bg-[var(--border)] my-6")
+
                 for m in metrics:
                     if m["col"] in df.columns:
                         with ui.card().classes("w-full p-4 mb-6"):
                             ui.label(m["title"]).classes(
                                 "text-2xl font-bold mb-4 text-[var(--text)]"
                             )
-                            edge_stats = app.storage.user.get(stats_key, {}) or {}
-                            col_stats = edge_stats.get(m["col"], {})
                             with ui.row().classes(
                                 "w-full justify-around mb-4 p-3 bg-[var(--bg-secondary)] rounded-lg"
                             ):
+
+                                stats_key = "temphum_stats" if is_th else "gas_stats"
+                                edge_stats = app.storage.user.get(stats_key, {}) or {}
+                                col_stats = edge_stats.get(m["col"], {})
+
                                 for stat_name, label in [
                                     ("min", "Min"),
                                     ("max", "Max"),
@@ -482,6 +614,7 @@ def render_collect_card(sensor_type):
                                             "text-xl font-bold text-[var(--text)]"
                                         )
                                         ui.label(label).classes("metric-label")
+
                             with ui.row().classes("w-full gap-6 items-start"):
                                 with ui.column().classes("flex-1"):
                                     ui.table.from_pandas(
@@ -502,43 +635,62 @@ def render_collect_card(sensor_type):
 def index():
     init_storage()
     with ui.header().classes("h-25 items-center px-6"):
-        ui.label("Polling Architecture Dashboard").classes(
-            "text-3xl font-bold text-[var(--text)]"
-        )
+        ui.label("Sensor Dashboard").classes("text-3xl font-bold text-[var(--text)]")
+
         with ui.row().classes(
             "items-center gap-2 ml-4 px-3 py-1 bg-[var(--card)] border border-[var(--border)] rounded-lg"
         ):
-            status_dot = ui.element("div").classes("w-3 h-3 rounded-full bg-gray-500")
+            status_dot = ui.element("div").classes("w-3 h-3 rounded-full")
             status_text = ui.label("Checking...").classes(
                 "text-[var(--text)] font-medium text-sm"
             )
 
-            async def update_status():
-                color, text = await check_system_status()
+            async def update_header_status():
+                backend_ok = False
+                esp_ok = False
+                try:
+                    async with httpx.AsyncClient() as client:
+                        resp = await client.get(f"{BASE_URL}/health", timeout=5)
+                        backend_ok = resp.json().get("status") == "ok"
+                        if backend_ok:
+                            esp = await client.get(f"{BASE_URL}/esphealth", timeout=6)
+                            esp_ok = esp.status_code == 200
+                except Exception:
+                    pass
+
+                if not backend_ok:
+                    color, text = "#f85149", "Backend Offline"
+                elif not esp_ok:
+                    color, text = "#d29922", "ESP32 Offline"
+                else:
+                    color, text = "#2ea043", "Online"
+
                 status_dot.style(
                     f"background-color: {color}; box-shadow: 0 0 8px {color}"
                 )
                 status_text.set_text(text)
 
-            ui.timer(5, update_status)
-            background_tasks.create(update_status())
+            ui.timer(5, update_header_status)
+            background_tasks.create(update_header_status())
         ui.space()
 
         def update_base_url(e):
             global BASE_URL
             BASE_URL = e.value.rstrip("/")
 
-        ui.input(value=BASE_URL, label="Cloud API URL").classes("w-80 text-base").props(
+        ui.input(value=BASE_URL, label="URL").classes("w-80 text-base").props(
             "dark outlined bg-color=#1E2329"
         ).on_value_change(update_base_url)
+
     main_container = ui.column().classes("w-full p-8 gap-8 max-w-7xl mx-auto")
     with main_container:
         content = ui.column().classes("w-full gap-8")
+
     with ui.left_drawer(value=True).classes("p-4").props("width=250 elevated"):
         ui.label("Navigation").classes("text-xl font-bold mb-6 text-[var(--text)] px-2")
         cards_config = {
-            "temp": ("Temperature", "/th", "temp", "°C", "temp_log"),
-            "hum": ("Humidity", "/th", "hum", "%", "hum_log"),
+            "temp": ("Temperature", "/temphum", "temp", "°C", "temp_log"),
+            "hum": ("Humidity", "/temphum", "hum", "%", "hum_log"),
             "gas": ("Gas", "/gas", "gas", "ppm", "gas_log"),
         }
         nav_buttons = {}
@@ -553,6 +705,7 @@ def index():
                     btn.classes(remove="bg-[#252A31] font-medium").classes(
                         add="bg-transparent text-[var(--muted)]"
                     )
+
             content.clear()
             with content:
                 if page_key == "overview":
@@ -576,7 +729,8 @@ def index():
                 "w-full justify-start bg-transparent text-[var(--muted)] mb-2 h-10 text-left text-base"
             )
             nav_buttons[key] = btn
+
     render_content("overview")
 
 
-ui.run(title="Polling Dashboard", dark=True, storage_secret="polling-secret", port=8081)
+ui.run(title="Sensor Dashboard", dark=True, storage_secret="my-secret-key", port=8081)

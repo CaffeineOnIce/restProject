@@ -3,10 +3,12 @@ Description=Poll Service for RaspPi
 After=network.target
 
 [Service]
+Type=simple
 User=root
 WorkingDirectory=/Poll
 ExecStart=/Poll/.venv/bin/python3 /Poll/script.py
 Restart=always
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target

@@ -19,7 +19,7 @@ plt.rcParams.update(
     }
 )
 
-BASE_URL = "https://restapi.shares.zrok.io"
+BASE_URL = "https://restapi2.shares.zrok.io"
 
 ui.add_css(
     """

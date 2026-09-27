@@ -1,0 +1,15 @@
+[Unit]
+Description=Flask REST API Bridge for ESP32
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/Tunnel
+Environment=PYTHONPATH=/Tunnel
+ExecStart=/Tunnel/.venv/bin/python3 /Tunnel/script.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

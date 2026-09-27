@@ -30,21 +30,15 @@ body { background-color: var(--bg) !important; color: var(--text) !important; fo
 """, shared=True)
 
 async def check_system_status(timeout=5):
-    cloud_ok = False
+    """Checks ONLY if the Cloud API is online, without triggering database writes."""
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.get(f"{BASE_URL}/health", timeout=timeout)
-            cloud_ok = resp.status_code == 200
-    except Exception: pass
-    esp_ok = False
-    if cloud_ok:
-        try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.post(f"{BASE_URL}/th", timeout=timeout + 5)
-                esp_ok = resp.status_code == 200
-        except Exception: pass
-    if cloud_ok and esp_ok: return "#2ea043", "All Systems Online"
-    if cloud_ok: return "#f59e0b", "ESP32/Bridge Offline"
+            if resp.status_code == 200:
+                return "#2ea043", "All Systems Online"
+    except Exception:
+        pass
+    
     return "#f85149", "Cloud API Offline"
 
 async def fetch_sensor(endpoint, field, timeout=30):

@@ -1,3 +1,7 @@
+# Install - 
+sudo apt update
+sudo apt install avahi-daemon avahi-utils libnss-mdns
+
 # Where these should be placed?
 
 1. `script.py`, `requirements.txt`, `.env`, `collect_gas.py`, `collect_temphum.py`, `config.py`, `fetch_gas.py`, `fetch_temphum.py`-> Raspberry Pi (in /Tunnel/)
@@ -34,7 +38,7 @@ sudo systemctl enable zrok-tunnel.service
 sudo systemctl start zrok-tunnel.service
 ```
 
-- Name used is `restapi`
+- Name used is `restapi2`
 - Port used is `52471`
 - Domain using zrok -> `restapi.shares.zrok.io`
 - Domain is reserved using zrok, so, others cannot use this domain unless we remove this from us ourselves.
