@@ -1,0 +1,14 @@
+{
+    "success_rate": 100.0,
+    "throughput_rpm": 1.8852867577096881,
+    "avg_lat_ms": 2048.6107581000397,
+    "p95_lat_ms": 3763.5248177502945,
+    "min_lat_ms": 985.1688649996504,
+    "max_lat_ms": 9290.460250000251,
+    "avg_bytes_per_op": 46,
+    "avg_cpu_percent": 0.018333333333333333,
+    "peak_mem_mb": 35.51953125,
+    "failed": 0,
+    "total_duration_sec": 3819.04767036438,
+    "total_requests": 120
+}

@@ -1,0 +1,12 @@
+Category,Metric,Arch 1 (Zrok),Arch 2 (DB Poll)
+Latency,End-to-End Avg (ms),2048.61,3003.06
+Latency,P95 Tail Latency (ms),3763.52,4987.31
+Latency,Min / Max (ms),985 / 9290,1498 / 8282
+Throughput,Requests / Min,1.89,2.00
+Reliability,Success Rate (%),100.0,100.0
+Reliability,Failed Requests,0,0
+Network,Avg Bytes / Op,46.0,23.0
+Resources,Avg CPU Usage (%),0.02,0.05
+Resources,Peak Memory (MB),35.52,35.69
+Summary,Total Requests,120,120
+Summary,Total Duration (sec),3819.05,3603.21

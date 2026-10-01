@@ -19,7 +19,7 @@ plt.rcParams.update(
     }
 )
 
-BASE_URL = "https://restapi2.shares.zrok.io"
+BASE_URL = "https://restapi3.shares.zrok.io"
 
 ui.add_css(
     """
@@ -648,7 +648,7 @@ def index():
             )
 
             async def update_header_status():
-                ok = await check_endpoint("/health") and await check_endpoint("/temphum")
+                ok = await check_endpoint("/health")
                 color = "#2ea043" if ok else "#f85149"
                 status_dot.style(f"background-color: {color}; box-shadow: 0 0 8px {color}")
                 status_text.set_text("Online" if ok else "Offline")

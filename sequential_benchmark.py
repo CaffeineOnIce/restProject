@@ -6,13 +6,14 @@ import statistics
 import time
 import httpx
 import psutil
+import csv
 
 # Configuration
-ARCH1_URL = "https://restapi2.shares.zrok.io"       # Direct Zrok Tunnel
-ARCH2_URL = "https://restproject-inbd.onrender.com" # Supabase Cloud Bridge
+ARCH1_URL = "https://restapi3.shares.zrok.io"       # Direct Zrok Tunnel (Arch 1)
+ARCH2_URL = "https://restproject-inbd.onrender.com" # Supabase Cloud Bridge (Arch 2)
 
-DURATION_SECONDS = 3600  # 1 Hour
-INTERVAL_SECONDS = 30    # 30 Seconds apart
+NUM_REQUESTS = 120  
+INTERVAL_SECONDS = 30
 
 async def measure_request(client, name, url, method, endpoint, payload=None):
     start = time.perf_counter()
@@ -46,36 +47,33 @@ async def measure_request(client, name, url, method, endpoint, payload=None):
         }
 
 async def run_sequential_benchmark(name, url, method, endpoint, payload=None):
-    """Runs requests sequentially every INTERVAL_SECONDS for DURATION_SECONDS"""
     proc = psutil.Process(os.getpid())
     results = []
     cpu_samples = []
     mem_samples = []
     
     start_time = time.time()
-    end_time = start_time + DURATION_SECONDS
     
-    print(f"Starting {name} benchmark for {DURATION_SECONDS/60} minutes...")
-    print(f"Interval: {INTERVAL_SECONDS}s | Endpoint: {endpoint}")
+    print(f"Starting {name} benchmark for {NUM_REQUESTS} requests (approx 1 hour)...")
+    print(f"Interval: {INTERVAL_SECONDS}s | Method: {method} | Endpoint: {endpoint}")
     
     async with httpx.AsyncClient() as client:
-        while time.time() < end_time:
+        for i in range(NUM_REQUESTS):
             # 1. Measure Resource Usage
             cpu_samples.append(proc.cpu_percent(interval=None))
             mem_samples.append(proc.memory_info().rss / (1024 * 1024)) # MB
             
             # 2. Perform Request
-            print(f"[{time.strftime('%H:%M:%S')}] Sending request...", end=" ")
+            print(f"[{i+1}/{NUM_REQUESTS}] Sending {method} {endpoint}...", end=" ")
             result = await measure_request(client, name, url, method, endpoint, payload)
             results.append(result)
             
             status = "OK" if result["success"] else f"FAIL ({result['status']})"
             print(f"{status} - {result['latency_ms']:.2f}ms")
             
-            # 3. Wait for next interval
-            next_run = time.time() + INTERVAL_SECONDS
-            if next_run < end_time:
-                await asyncio.sleep(next_run - time.time())
+            # 3. Wait for next interval (skip sleep after the very last request)
+            if i < NUM_REQUESTS - 1:
+                await asyncio.sleep(INTERVAL_SECONDS)
 
     total_duration = time.time() - start_time
     return results, total_duration, cpu_samples, mem_samples
@@ -88,7 +86,7 @@ def process_and_save(results, total_duration, cpu_samples, mem_samples, filename
     total = len(results)
     success_count = len(latencies)
     
-    # Calculate P95 safely
+    # Calculate P95
     if len(latencies) >= 20:
         p95 = statistics.quantiles(latencies, n=20)[18]
     elif len(latencies) > 0:
@@ -113,11 +111,11 @@ def process_and_save(results, total_duration, cpu_samples, mem_samples, filename
     
     with open(filename, "w") as f:
         json.dump(metrics, f, indent=4)
-    print(f"\n Saved metrics to {filename}")
+    print(f"\nSaved metrics to {filename}")
 
 def generate_report():
     if not os.path.exists("arch1_metrics.json") or not os.path.exists("arch2_metrics.json"):
-        print("Error: missing metric logs. Run both architecture benchmarks first.")
+        print("❌ Error: missing metric logs. Run both architecture benchmarks first.")
         return
 
     with open("arch1_metrics.json") as f:
@@ -125,22 +123,36 @@ def generate_report():
     with open("arch2_metrics.json") as f:
         m2 = json.load(f)
 
-    print("\n" + "=" * 80)
-    print(f"{'Category':<15} | {'Metric':<25} | {'Arch 1 (Zrok)':<15} | {'Arch 2 (DB Poll)':<15}")
-    print("=" * 80)
-    print(f"{'Latency':<15} | {'End-to-End Avg (ms)':<25} | {m1['avg_lat_ms']:<15.2f} | {m2['avg_lat_ms']:<15.2f}")
-    print(f"{'Latency':<15} | {'P95 Tail Latency (ms)':<25} | {m1['p95_lat_ms']:<15.2f} | {m2['p95_lat_ms']:<15.2f}")
-    print(f"{'Latency':<15} | {'Min / Max (ms)':<25} | {m1['min_lat_ms']:.0f} / {m1['max_lat_ms']:.0f}{'':<4} | {m2['min_lat_ms']:.0f} / {m2['max_lat_ms']:.0f}")
-    print("-" * 80)
-    print(f"{'Throughput':<15} | {'Requests / Min (T)':<25} | {m1['throughput_rpm']:<15.2f} | {m2['throughput_rpm']:<15.2f}")
-    print(f"{'Reliability':<15} | {'Success Rate (%)':<25} | {m1['success_rate']:<15.1f} | {m2['success_rate']:<15.1f}")
-    print(f"{'Reliability':<15} | {'Failed Requests':<25} | {m1['failed']:<15} | {m2['failed']:<15}")
-    print("-" * 80)
-    print(f"{'Network':<15} | {'Avg Bytes / Op (B)':<25} | {m1['avg_bytes_per_op']:<15.1f} | {m2['avg_bytes_per_op']:<15.1f}")
-    print(f"{'Resources':<15} | {'Avg CPU Usage (%)':<25} | {m1['avg_cpu_percent']:<15.2f} | {m2['avg_cpu_percent']:<15.2f}")
-    print(f"{'Resources':<15} | {'Peak Memory (MB)':<25} | {m1['peak_mem_mb']:<15.2f} | {m2['peak_mem_mb']:<15.2f}")
-    print(f"{'Summary':<15} | {'Total Requests':<25} | {m1['total_requests']:<15} | {m2['total_requests']:<15}")
-    print("=" * 80 + "\n")
+    report_rows = [
+        ["Category", "Metric", "Arch 1 (Zrok)", "Arch 2 (DB Poll)"],
+        ["Latency", "End-to-End Avg (ms)", f"{m1['avg_lat_ms']:.2f}", f"{m2['avg_lat_ms']:.2f}"],
+        ["Latency", "P95 Tail Latency (ms)", f"{m1['p95_lat_ms']:.2f}", f"{m2['p95_lat_ms']:.2f}"],
+        ["Latency", "Min / Max (ms)", f"{m1['min_lat_ms']:.0f} / {m1['max_lat_ms']:.0f}", f"{m2['min_lat_ms']:.0f} / {m2['max_lat_ms']:.0f}"],
+        ["Throughput", "Requests / Min", f"{m1['throughput_rpm']:.2f}", f"{m2['throughput_rpm']:.2f}"],
+        ["Reliability", "Success Rate (%)", f"{m1['success_rate']:.1f}", f"{m2['success_rate']:.1f}"],
+        ["Reliability", "Failed Requests", str(m1['failed']), str(m2['failed'])],
+        ["Network", "Avg Bytes / Op", f"{m1['avg_bytes_per_op']:.1f}", f"{m2['avg_bytes_per_op']:.1f}"],
+        ["Resources", "Avg CPU Usage (%)", f"{m1['avg_cpu_percent']:.2f}", f"{m2['avg_cpu_percent']:.2f}"],
+        ["Resources", "Peak Memory (MB)", f"{m1['peak_mem_mb']:.2f}", f"{m2['peak_mem_mb']:.2f}"],
+        ["Summary", "Total Requests", str(m1['total_requests']), str(m2['total_requests'])],
+        ["Summary", "Total Duration (sec)", f"{m1['total_duration_sec']:.2f}", f"{m2['total_duration_sec']:.2f}"],
+    ]
+
+    # 1. Print to Console
+    print("\n" + "=" * 85)
+    print(f"{'Category':<15} | {'Metric':<25} | {'Arch 1 (Zrok)':<18} | {'Arch 2 (DB Poll)':<18}")
+    print("=" * 85)
+    for row in report_rows[1:]: # Skip header for console print
+        print(f"{row[0]:<15} | {row[1]:<25} | {row[2]:<18} | {row[3]:<18}")
+    print("=" * 85 + "\n")
+
+    # 2. Export to CSV
+    csv_filename = "benchmark_report.csv"
+    with open(csv_filename, mode='w', newline='', encoding='utf-8') as file:
+        writer = csv.writer(file)
+        writer.writerows(report_rows)
+    
+    print(f"Successfully exported comparative report to: {csv_filename}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Automated Comparative Benchmark Engine (Sequential)")
@@ -149,15 +161,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.run == "arch1":
-        print("--- Benchmarking Architecture 1 (Zrok Tunnel) ---")
-        # Arch 1 uses GET /temphum
+        print("--- Benchmarking Architecture 1 (Direct Zrok Tunnel) ---")
         res, duration, cpu, mem = asyncio.run(run_sequential_benchmark("Arch 1", ARCH1_URL, "GET", "/temphum"))
         process_and_save(res, duration, cpu, mem, "arch1_metrics.json")
+        
     elif args.run == "arch2":
-        print("--- Benchmarking Architecture 2 (Cloud DB Polling) ---")
-        # Arch 2 uses POST /th
+        print("--- Benchmarking Architecture 2 (Supabase Cloud Polling) ---")
         res, duration, cpu, mem = asyncio.run(run_sequential_benchmark("Arch 2", ARCH2_URL, "POST", "/th"))
         process_and_save(res, duration, cpu, mem, "arch2_metrics.json")
+        
     elif args.report:
         generate_report()
     else:
