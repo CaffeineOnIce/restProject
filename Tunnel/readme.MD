@@ -1,6 +1,8 @@
-# Install - 
+# Install
+```bash
 sudo apt update
 sudo apt install avahi-daemon avahi-utils libnss-mdns
+```
 
 # Where these should be placed?
 
@@ -22,25 +24,17 @@ sudo chmod +x /usr/local/bin/zrok-reset-run.sh
    - Do not install zrok agent
 3. Create zrok2 account
 4. Enable zrok2 environment
-5. For custom domain name:
-```bash
-zrok2 create name <name>
-```
-6. Public share:
-```bash
-zrok2 share public localhost:<port> -n public:<name>
-```
-7. Run:
+
+5. Run:
 ```bash
 sudo systemctl enable esp32-bridge.service
 sudo systemctl start esp32-bridge.service
 sudo systemctl enable zrok-tunnel.service
 sudo systemctl start zrok-tunnel.service
 ```
-
-- Name used is `restapi2`
+- Name used is `restapi3`
 - Port used is `52471`
-- Domain using zrok -> `restapi.shares.zrok.io`
+- Domain using zrok -> `restapi3.shares.zrok.io`
 - Domain is reserved using zrok, so, others cannot use this domain unless we remove this from us ourselves.
 
 
@@ -48,7 +42,7 @@ sudo systemctl start zrok-tunnel.service
 
 ## Fetch
 ```bash
-curl -sL restapi.shares.zrok.io/temphum | jq .
+curl -sL restapi3.shares.zrok.io/temphum | jq .
 ```
 - `/temphum` for temp and humidity  
 - `/gas` for gas  
@@ -58,7 +52,7 @@ Outputs in JSON.
 ## Collect
 ### Start Task
 ```bash
-curl -X POST https://restapi.shares.zrok.io/ctemphum \
+curl -X POST https://restapi3.shares.zrok.io/ctemphum \
      -H "Content-Type: application/json" \
      -d '{"duration": 30, "interval": 5}' | jq .
 ```
@@ -69,7 +63,7 @@ curl -X POST https://restapi.shares.zrok.io/ctemphum \
 
 ### Check if task has finished
 ```bash
-curl https://restapi.shares.zrok.io/task/<task-id> | jq .                   
+curl https://restapi3.shares.zrok.io/task/<task-id> | jq .                   
 ```
 Outputs in JSON.
 
@@ -125,7 +119,8 @@ CREATE INDEX IF NOT EXISTS idx_gasval_collection ON gasval(session_id, sample_in
 ```
 
 ## .env File
-```
+```env
 SUPABASE_URL=<url>
 SUPABASE_KEY=<publishable key>
+ESP32_URL=http://esp32.local
 ```
