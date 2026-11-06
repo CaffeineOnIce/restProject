@@ -10,22 +10,44 @@ app = Flask(__name__)
 CORS(app)
 supabase = create_client(os.environ.get("SUPABASE_URL"), os.environ.get("SUPABASE_KEY"))
 
-POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", 1))
-TIMEOUT = int(os.getenv("BRIDGE_TIMEOUT", 25))
+POLL_INTERVAL = float(os.getenv("POLL_INTERVAL", 1))
+TIMEOUT = float(os.getenv("BRIDGE_TIMEOUT", 25))  # seconds
+MAX_ATTEMPTS = max(1, int(TIMEOUT / POLL_INTERVAL))
+
+TIMING_COLS = ["t_pi_seen", "t_esp_start", "t_esp_end", "t_db_done", "t_pi_done"]
+
+
+def now_ms():
+    """Wall-clock time in epoch milliseconds (UTC), used for per-hop timing."""
+    return time.time() * 1000
 
 
 @app.route("/th", methods=["POST"])
 def get_temp_hum():
+    t_render_rx = now_ms()
     res = supabase.table("temphum").insert({"status": "pending"}).execute()
+    t_render_insert = now_ms()
     job_id = res.data[0]["id"]
-    for _ in range(TIMEOUT):
+    for _ in range(MAX_ATTEMPTS):
         time.sleep(POLL_INTERVAL)
         result = supabase.table("temphum").select("*").eq("id", job_id).execute().data
         if not result:
             continue
         result = result[0]
         if result["status"] == "completed":
-            return jsonify({"temp": result["temp"], "hum": result["hum"]}), 200
+            timing = {k: result.get(k) for k in TIMING_COLS}
+            timing.update(
+                {
+                    "t_render_rx": t_render_rx,
+                    "t_render_insert": t_render_insert,
+                    "t_render_detect": now_ms(),
+                }
+            )
+            timing["t_render_tx"] = now_ms()
+            return (
+                jsonify({"temp": result["temp"], "hum": result["hum"], "timing": timing}),
+                200,
+            )
         if result["status"] == "error":
             return jsonify({"error": result["error_msg"]}), 500
     supabase.table("temphum").update(
@@ -38,7 +60,7 @@ def get_temp_hum():
 def get_gas():
     res = supabase.table("gasval").insert({"status": "pending"}).execute()
     job_id = res.data[0]["id"]
-    for _ in range(TIMEOUT):
+    for _ in range(MAX_ATTEMPTS):
         time.sleep(POLL_INTERVAL)
         result = supabase.table("gasval").select("*").eq("id", job_id).execute().data
         if not result:

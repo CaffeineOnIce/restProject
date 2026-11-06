@@ -1,16 +1,25 @@
+import time
 import requests
 from datetime import datetime, timezone, timedelta
 from config import ESP32_URL, supabase
 
+# Define Indian Standard Time (UTC + 5:30)
 IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def now_ms():
+    """Wall-clock time in epoch milliseconds (UTC), used for per-hop timing."""
+    return time.time() * 1000
 
 
 def handle_temp_hum():
     """Fetch ONE temperature+humidity reading from ESP32 and save to Supabase."""
+    timing = {"t_esp_start": now_ms()}
     try:
         resp = requests.get(f"{ESP32_URL}/temphum", timeout=10)
         resp.raise_for_status()
         data = resp.json()
+        timing["t_esp_end"] = now_ms()
 
         if (
             "temperature" in data
@@ -18,7 +27,7 @@ def handle_temp_hum():
             and isinstance(data["temperature"], (int, float))
             and isinstance(data["humidity"], (int, float))
         ):
-            now = datetime.now(IST).strftime("%Y-%m-%dT%H:%M:%S")
+            now = datetime.now(IST).isoformat(timespec="seconds")
             result = {
                 "status": "completed",
                 "temp": round(data["temperature"], 2),
@@ -26,22 +35,31 @@ def handle_temp_hum():
                 "completed_at": now,
             }
             supabase.table("temphum").insert(result).execute()
+            timing["t_db_done"] = now_ms()
             return {
                 "temp": result["temp"],
                 "hum": result["hum"],
                 "status": result["status"],
+                "timing": timing,
             }
         else:
-            now = datetime.now(IST).strftime("%Y-%m-%dT%H:%M:%S")
+            now = datetime.now(IST).isoformat(timespec="seconds")
             error_result = {
                 "status": "error",
                 "error_msg": "Invalid sensor data format",
                 "completed_at": now,
             }
             supabase.table("temphum").insert(error_result).execute()
-            return {"temp": None, "hum": None, "status": "error"}
+            timing["t_db_done"] = now_ms()
+            return {"temp": None, "hum": None, "status": "error", "timing": timing}
     except Exception as e:
-        now = datetime.now(IST).strftime("%Y-%m-%dT%H:%M:%S")
-        error_result = {"status": "error", "error_msg": str(e), "completed_at": now}
+        timing.setdefault("t_esp_end", now_ms())
+        now = datetime.now(IST).isoformat(timespec="seconds")
+        error_result = {
+            "status": "error",
+            "error_msg": str(e),
+            "completed_at": now,
+        }
         supabase.table("temphum").insert(error_result).execute()
-        return {"temp": None, "hum": None, "status": "error"}
+        timing["t_db_done"] = now_ms()
+        return {"temp": None, "hum": None, "status": "error", "timing": timing}
