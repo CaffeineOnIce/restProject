@@ -234,51 +234,71 @@ def generate_report():
     print("\nSaved benchmark_report.csv, segments_report.csv, latency_cdf.png, latency_breakdown.png")
 
 
+SEGMENT_LABELS = {
+    "network_tunnel": "Network (tunnel)",
+    "network_render": "Network (Render)",
+    "esp_read": "ESP32 read",
+    "db_log": "DB write",
+    "pi_other": "Pi other",
+    "render_insert": "Render insert",
+    "pi_poll_wait (x-host)": "Pi poll wait*",
+    "pi_claim": "Pi claim",
+    "pi_complete": "Pi complete",
+    "render_poll_wait (x-host)": "Render poll wait*",
+}
+
+
 def plot_figures(lat, seg_medians, order):
+    import math
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    plt.rcParams.update({"font.size": 12, "axes.titlesize": 13, "axes.labelsize": 12,
-                         "xtick.labelsize": 11, "ytick.labelsize": 11, "legend.fontsize": 10})
+    # Sized for half a two-column page: small canvas, relatively large text.
+    plt.rcParams.update({"font.size": 10, "axes.labelsize": 10,
+                         "xtick.labelsize": 9, "ytick.labelsize": 9, "legend.fontsize": 8.5})
+    figsize = (4.8, 3.2)
 
     # CDF of end-to-end latency
-    fig, ax = plt.subplots(figsize=(7, 4.5))
+    fig, ax = plt.subplots(figsize=figsize)
     for arch in order:
         x = np.sort(lat[arch])
         if len(x):
             ax.step(x, np.arange(1, len(x) + 1) / len(x), where="post",
-                    linewidth=2, label=ARCHS[arch][0])
+                    linewidth=1.8, label=ARCHS[arch][0])
     ax.set_xlabel("End-to-end latency (ms)")
-    ax.set_ylabel("Cumulative fraction of requests")
+    ax.set_ylabel("Cumulative fraction")
     ax.set_ylim(0, 1.02)
     ax.legend(loc="lower right")
     ax.grid(alpha=0.3)
     fig.savefig("latency_cdf.png", dpi=300, bbox_inches="tight")
     plt.close(fig)
 
-    # Stacked per-segment median latency
-    fig, ax = plt.subplots(figsize=(9, 4))
+    # Stacked per-segment median latency, legend under the plot in 2 rows
+    fig, ax = plt.subplots(figsize=figsize)
     cmap = plt.get_cmap("tab20")
     seen = {}
     for i, arch in enumerate(order):
         left = 0.0
         for k, v in seg_medians[arch].items():
             v = max(v, 0.0)
+            if v < 1:          # skip empty segments so they don't clutter the legend
+                continue
             if k not in seen:
                 seen[k] = cmap(len(seen) % 20)
-            ax.barh(i, v, left=left, color=seen[k], edgecolor="white", height=0.55,
-                    label=k)
+            ax.barh(i, v, left=left, color=seen[k], edgecolor="white", height=0.6,
+                    label=SEGMENT_LABELS.get(k, k))
             left += v
     ax.set_yticks(range(len(order)))
-    ax.set_yticklabels([ARCHS[a][0] for a in order])
+    ax.set_yticklabels([ARCHS[a][0].replace(" (", "\n(") for a in order])
     ax.invert_yaxis()
     ax.set_xlabel("Median latency per segment (ms)")
     ax.grid(axis="x", alpha=0.3)
     handles, labels = ax.get_legend_handles_labels()
     uniq = dict(zip(labels, handles))
-    ax.legend(uniq.values(), uniq.keys(), loc="upper left", bbox_to_anchor=(1.01, 1),
-              frameon=False)
+    ax.legend(uniq.values(), uniq.keys(), loc="upper center", bbox_to_anchor=(0.5, -0.22),
+              ncol=math.ceil(len(uniq) / 2), frameon=False,
+              columnspacing=0.9, handlelength=1.1, handletextpad=0.4)
     fig.savefig("latency_breakdown.png", dpi=300, bbox_inches="tight")
     plt.close(fig)
 
