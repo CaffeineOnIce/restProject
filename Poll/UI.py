@@ -29,20 +29,20 @@ body { background-color: var(--bg) !important; color: var(--text) !important; fo
 .custom-button { background-color: var(--primary) !important; color: #0F1419 !important; font-weight: 600; border-radius: 8px !important; text-transform: none !important; font-size: 1.05rem !important; }
 """, shared=True)
 
-async def check_system_status(timeout=5):
+async def check_system_status(timeout=15):
     cloud_ok = False
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
             resp = await client.get(f"{BASE_URL}/health", timeout=timeout)
             cloud_ok = resp.status_code == 200
-    except Exception: pass
+    except Exception as e: print("health check failed:", repr(e))
     esp_ok = False
     if cloud_ok:
         try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.post(f"{BASE_URL}/th", timeout=timeout + 5)
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                resp = await client.post(f"{BASE_URL}/th", timeout=35)
                 esp_ok = resp.status_code == 200
-        except Exception: pass
+        except Exception as e: print("bridge check failed:", repr(e))
     if cloud_ok and esp_ok: return "#2ea043", "All Systems Online"
     if cloud_ok: return "#f59e0b", "ESP32/Bridge Offline"
     return "#f85149", "Cloud API Offline"
@@ -280,11 +280,17 @@ def index():
         with ui.row().classes("items-center gap-2 ml-4 px-3 py-1 bg-[var(--card)] border border-[var(--border)] rounded-lg"):
             status_dot = ui.element("div").classes("w-3 h-3 rounded-full bg-gray-500")
             status_text = ui.label("Checking...").classes("text-[var(--text)] font-medium text-sm")
+            checking = {"busy": False}
             async def update_status():
-                color, text = await check_system_status()
-                status_dot.style(f"background-color: {color}; box-shadow: 0 0 8px {color}")
-                status_text.set_text(text)
-            ui.timer(5, update_status)
+                if checking["busy"]: return  # skip if the previous check is still running
+                checking["busy"] = True
+                try:
+                    color, text = await check_system_status()
+                    status_dot.style(f"background-color: {color}; box-shadow: 0 0 8px {color}")
+                    status_text.set_text(text)
+                finally:
+                    checking["busy"] = False
+            ui.timer(30, update_status)
             background_tasks.create(update_status())
         ui.space()
         def update_base_url(e):

@@ -1,7 +1,8 @@
 # Install
 ```bash
 sudo apt update
-sudo apt install avahi-daemon avahi-utils libnss-mdns
+sudo apt install -y avahi-daemon avahi-utils libnss-mdns
+sudo systemctl enable --now avahi-daemon
 ```
 
 # Where these should be placed?

@@ -9,7 +9,7 @@
 
 #define placa "ESP32"
 #define Voltage_Resolution 3.3
-#define pin 34
+#define pin 5   // ESP32-S3: MQ-135 AO on an ADC1 pin (GPIO 1-10)
 #define type "MQ-135"
 #define ADC_Bit_Resolution 12
 #define RatioMQ135CleanAir 3.6
@@ -41,10 +41,10 @@ void handleGas()
 {
   MQ135.update();
   float correctionFactor = 0;
-  
-  MQ135.setA(110.47); 
-  MQ135.setB(-2.862); 
-  
+
+  MQ135.setA(110.47);
+  MQ135.setB(-2.862);
+
   float gasVal = MQ135.readSensor(false, correctionFactor) + 400;
 
   String json = "{\"gas\":" + String(gasVal, 1) + "}";
@@ -63,14 +63,14 @@ void setup()
   delay(2000);
 
   dht.begin();
-  analogSetWidth(12);
+  analogReadResolution(12);
 
   WiFi.mode(WIFI_STA);
   WiFi.disconnect(true);
   delay(100);
 
-  wifiMulti.addAP("TowerBox 2.4", "routerBox1290");
-  wifiMulti.addAP("TP-Link_3BCA", "65591574");
+  wifiMulti.addAP("TowerBox 2.4", "honduras1234");
+  wifiMulti.addAP("SNS wifi", "sns@2026");
 
   Serial.print("Connecting to WiFi");
   while (wifiMulti.run() != WL_CONNECTED)
@@ -92,10 +92,10 @@ void setup()
 
   // MQ-135 Setup
   MQ135.setRegressionMethod(1); //_PPM =  a*ratio^b
-  
+
   // Configure the pin of arduino as input.
-  MQ135.init(); 
-  
+  MQ135.init();
+
   // Set RL value (Kept your 4.7K assumption)
   MQ135.setRL(4.7);
 
@@ -109,17 +109,17 @@ void setup()
   }
   MQ135.setR0(calcR0 / 10);
   Serial.println("  done!.");
-  
+
   // Safety checks from the working example to catch wiring/hardware issues
   if (isinf(calcR0)) {
-    Serial.println("Warning: Connection issue, R0 is infinite (Open circuit detected) please check your wiring and supply"); 
+    Serial.println("Warning: Connection issue, R0 is infinite (Open circuit detected) please check your wiring and supply");
     while (1);
   }
   if (calcR0 == 0) {
-    Serial.println("Warning: Connection issue found, R0 is zero (Analog pin shorts to ground) please check your wiring and supply"); 
+    Serial.println("Warning: Connection issue found, R0 is zero (Analog pin shorts to ground) please check your wiring and supply");
     while (1);
   }
-  
+
   Serial.println("** Values from MQ-135 **");
 
   server.on("/temphum", HTTP_GET, handleTempHum);
@@ -139,3 +139,4 @@ void loop()
 
   server.handleClient();
 }
+

@@ -1,175 +1,297 @@
 import argparse
 import asyncio
-import json
-import os
-import statistics
-import time
-import httpx
-import psutil
 import csv
+import glob
+import time
+
+import httpx
+import numpy as np
 
 # Configuration
-ARCH1_URL = "https://restapi3.shares.zrok.io"       # Direct Zrok Tunnel (Arch 1)
-ARCH2_URL = "https://restproject-inbd.onrender.com" # Supabase Cloud Bridge (Arch 2)
+ARCH1_URL = "https://restapi5.shares.zrok.io"        # Direct Zrok Tunnel (Arch 1)
+ARCH2_URL = "https://restproject-inbd.onrender.com"  # Supabase Cloud Bridge (Arch 2)
+ENDPOINT = "/th"         # same endpoint, method and response format on both architectures
 
-NUM_REQUESTS = 120  
-INTERVAL_SECONDS = 30
+NUM_REQUESTS = 120
+INTERVAL_SECONDS = 30    # fixed schedule: request i starts at start + i * 30 s
+TIMEOUT = 35.0           # per-request timeout (s)
+BOOTSTRAP = 2000
 
-async def measure_request(client, name, url, method, endpoint, payload=None):
+ARCHS = {"arch1": ("Arch 1 (Zrok)", ARCH1_URL), "arch2": ("Arch 2 (DB Poll)", ARCH2_URL)}
+
+TIMING_KEYS = [
+    "t_pi_rx", "t_pi_seen", "t_esp_start", "t_esp_end", "t_db_done",
+    "t_pi_done", "t_pi_tx",
+    "t_render_rx", "t_render_insert", "t_render_detect", "t_render_tx",
+]
+FIELDS = ["arch", "session", "index", "t_client_send", "t_client_recv",
+          "latency_ms", "http_status", "success", "error"] + TIMING_KEYS
+
+
+def now_ms():
+    return time.time() * 1000
+
+
+def valid_reading(body):
+    return isinstance(body.get("temp"), (int, float)) and isinstance(body.get("hum"), (int, float))
+
+
+async def measure_request(client, arch, session, index):
+    url = ARCHS[arch][1] + ENDPOINT
+    body, http_status, error = {}, "", ""
+    t_send = now_ms()
     start = time.perf_counter()
-    req_bytes = len(json.dumps(payload).encode('utf-8')) if payload else 0
-    
     try:
-        if method == "GET":
-            resp = await client.get(f"{url}{endpoint}", timeout=35.0)
-        else:
-            resp = await client.post(f"{url}{endpoint}", json=payload, timeout=35.0)
-        
+        resp = await client.post(url, timeout=TIMEOUT)
         latency = (time.perf_counter() - start) * 1000
-        resp_bytes = len(resp.content)
-        total_bytes = req_bytes + resp_bytes
-        
-        return {
-            "arch": name,
-            "success": resp.status_code == 200,
-            "status": resp.status_code,
-            "latency_ms": latency,
-            "bytes_transferred": total_bytes
-        }
+        http_status = resp.status_code
+        try:
+            body = resp.json()
+        except ValueError:
+            body = {}
+        # Same rule for both architectures: HTTP 200 and a valid reading in the body.
+        success = http_status == 200 and valid_reading(body)
+        if not success:
+            error = str(body.get("error") or resp.text[:100])
     except Exception as e:
         latency = (time.perf_counter() - start) * 1000
-        return {
-            "arch": name, 
-            "success": False, 
-            "status": str(e), 
-            "latency_ms": latency,
-            "bytes_transferred": req_bytes
-        }
+        success = False
+        error = type(e).__name__ + ": " + str(e)
+    t_recv = now_ms()
 
-async def run_sequential_benchmark(name, url, method, endpoint, payload=None):
-    proc = psutil.Process(os.getpid())
-    results = []
-    cpu_samples = []
-    mem_samples = []
-    
-    start_time = time.time()
-    
-    print(f"Starting {name} benchmark for {NUM_REQUESTS} requests (approx 1 hour)...")
-    print(f"Interval: {INTERVAL_SECONDS}s | Method: {method} | Endpoint: {endpoint}")
-    
-    async with httpx.AsyncClient() as client:
-        for i in range(NUM_REQUESTS):
-            # 1. Measure Resource Usage
-            cpu_samples.append(proc.cpu_percent(interval=None))
-            mem_samples.append(proc.memory_info().rss / (1024 * 1024)) # MB
-            
-            # 2. Perform Request
-            print(f"[{i+1}/{NUM_REQUESTS}] Sending {method} {endpoint}...", end=" ")
-            result = await measure_request(client, name, url, method, endpoint, payload)
-            results.append(result)
-            
-            status = "OK" if result["success"] else f"FAIL ({result['status']})"
-            print(f"{status} - {result['latency_ms']:.2f}ms")
-            
-            # 3. Wait for next interval (skip sleep after the very last request)
-            if i < NUM_REQUESTS - 1:
-                await asyncio.sleep(INTERVAL_SECONDS)
-
-    total_duration = time.time() - start_time
-    return results, total_duration, cpu_samples, mem_samples
-
-def process_and_save(results, total_duration, cpu_samples, mem_samples, filename):
-    latencies = [r["latency_ms"] for r in results if r["success"]]
-    failures = [r for r in results if not r["success"]]
-    bytes_list = [r["bytes_transferred"] for r in results]
-    
-    total = len(results)
-    success_count = len(latencies)
-    
-    # Calculate P95
-    if len(latencies) >= 20:
-        p95 = statistics.quantiles(latencies, n=20)[18]
-    elif len(latencies) > 0:
-        p95 = max(latencies)
-    else:
-        p95 = 0
-
-    metrics = {
-        "success_rate": (success_count / total) * 100 if total > 0 else 0,
-        "throughput_rpm": (success_count / total_duration) * 60 if total_duration > 0 else 0,
-        "avg_lat_ms": statistics.mean(latencies) if latencies else 0,
-        "p95_lat_ms": p95,
-        "min_lat_ms": min(latencies, default=0),
-        "max_lat_ms": max(latencies, default=0),
-        "avg_bytes_per_op": statistics.mean(bytes_list) if bytes_list else 0,
-        "avg_cpu_percent": statistics.mean(cpu_samples) if cpu_samples else 0,
-        "peak_mem_mb": max(mem_samples, default=0),
-        "failed": len(failures),
-        "total_duration_sec": total_duration,
-        "total_requests": total
+    timing = body.get("timing") or {}
+    row = {
+        "arch": arch, "session": session, "index": index,
+        "t_client_send": round(t_send, 1), "t_client_recv": round(t_recv, 1),
+        "latency_ms": round(latency, 1), "http_status": http_status,
+        "success": int(success), "error": error,
     }
-    
-    with open(filename, "w") as f:
-        json.dump(metrics, f, indent=4)
-    print(f"\nSaved metrics to {filename}")
+    row.update({k: timing.get(k) for k in TIMING_KEYS})
+    return row
+
+
+async def run_session(arch, session):
+    name = ARCHS[arch][0]
+    path = f"raw_{arch}_{session}.csv"
+    print(f"--- {name}, session '{session}': {NUM_REQUESTS} requests, one every {INTERVAL_SECONDS}s ---")
+    print(f"Writing raw results to {path}")
+
+    async with httpx.AsyncClient(follow_redirects=True) as client:
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=FIELDS)
+            writer.writeheader()
+            start = time.monotonic()
+            for i in range(NUM_REQUESTS):
+                # Fixed schedule (start-to-start); if a request overruns its slot,
+                # the next one starts immediately.
+                delay = start + i * INTERVAL_SECONDS - time.monotonic()
+                if delay > 0:
+                    await asyncio.sleep(delay)
+                row = await measure_request(client, arch, session, i)
+                writer.writerow(row)
+                f.flush()
+                state = "OK" if row["success"] else f"FAIL ({row['http_status']} {row['error']})"
+                print(f"[{i + 1}/{NUM_REQUESTS}] {state} - {row['latency_ms']:.0f} ms")
+
+
+def load_rows():
+    rows = []
+    for path in sorted(glob.glob("raw_arch*_*.csv")):
+        with open(path, encoding="utf-8") as f:
+            rows.extend(csv.DictReader(f))
+    return rows
+
+
+def num(value):
+    return float(value) if value not in (None, "") else None
+
+
+def diff(r, a, b):
+    x, y = num(r.get(a)), num(r.get(b))
+    return y - x if x is not None and y is not None else None
+
+
+def segments(r):
+    """Per-hop segments in ms. Segments marked (x-host) use timestamps from two
+    machines and include their clock offset; the others use one machine's clock."""
+    e2e = num(r["latency_ms"])
+    if r["arch"] == "arch1":
+        pi_total = diff(r, "t_pi_rx", "t_pi_tx")
+        esp, db = diff(r, "t_esp_start", "t_esp_end"), diff(r, "t_esp_end", "t_db_done")
+        return {
+            "network_tunnel": e2e - pi_total if pi_total is not None else None,
+            "esp_read": esp,
+            "db_log": db,
+            "pi_other": pi_total - (esp or 0) - (db or 0) if pi_total is not None else None,
+        }
+    render_total = diff(r, "t_render_rx", "t_render_tx")
+    return {
+        "network_render": e2e - render_total if render_total is not None else None,
+        "render_insert": diff(r, "t_render_rx", "t_render_insert"),
+        "pi_poll_wait (x-host)": diff(r, "t_render_insert", "t_pi_seen"),
+        "pi_claim": diff(r, "t_pi_seen", "t_esp_start"),
+        "esp_read": diff(r, "t_esp_start", "t_esp_end"),
+        "db_log": diff(r, "t_esp_end", "t_db_done"),
+        "pi_complete": diff(r, "t_db_done", "t_pi_done"),
+        "render_poll_wait (x-host)": diff(r, "t_pi_done", "t_render_detect"),
+    }
+
+
+def p95(a, axis=None):
+    return np.percentile(a, 95, axis=axis)
+
 
 def generate_report():
-    if not os.path.exists("arch1_metrics.json") or not os.path.exists("arch2_metrics.json"):
-        print("❌ Error: missing metric logs. Run both architecture benchmarks first.")
+    rows = load_rows()
+    if not rows:
+        print("❌ Error: no raw_arch*_*.csv files found. Run sessions first.")
         return
+    rng = np.random.default_rng(0)
+    order = ["arch1", "arch2"]
+    lat, summary = {}, {}
 
-    with open("arch1_metrics.json") as f:
-        m1 = json.load(f)
-    with open("arch2_metrics.json") as f:
-        m2 = json.load(f)
+    for arch in order:
+        sent = [r for r in rows if r["arch"] == arch]
+        ok = np.array([float(r["latency_ms"]) for r in sent if r["success"] == "1"])
+        lat[arch] = ok
+        if len(ok) == 0:
+            summary[arch] = None
+            continue
+        q1, med, q3 = np.percentile(ok, [25, 50, 75])
+        boot = p95(rng.choice(ok, size=(BOOTSTRAP, len(ok)), replace=True), axis=1)
+        summary[arch] = {
+            "median": med, "iqr": f"{q1:.0f}-{q3:.0f}", "p95": p95(ok),
+            "p95_ci": f"{np.percentile(boot, 2.5):.0f}-{np.percentile(boot, 97.5):.0f}",
+            "min": ok.min(), "max": ok.max(), "success": f"{len(ok)}/{len(sent)}",
+        }
 
-    report_rows = [
-        ["Category", "Metric", "Arch 1 (Zrok)", "Arch 2 (DB Poll)"],
-        ["Latency", "End-to-End Avg (ms)", f"{m1['avg_lat_ms']:.2f}", f"{m2['avg_lat_ms']:.2f}"],
-        ["Latency", "P95 Tail Latency (ms)", f"{m1['p95_lat_ms']:.2f}", f"{m2['p95_lat_ms']:.2f}"],
-        ["Latency", "Min / Max (ms)", f"{m1['min_lat_ms']:.0f} / {m1['max_lat_ms']:.0f}", f"{m2['min_lat_ms']:.0f} / {m2['max_lat_ms']:.0f}"],
-        ["Throughput", "Requests / Min", f"{m1['throughput_rpm']:.2f}", f"{m2['throughput_rpm']:.2f}"],
-        ["Reliability", "Success Rate (%)", f"{m1['success_rate']:.1f}", f"{m2['success_rate']:.1f}"],
-        ["Reliability", "Failed Requests", str(m1['failed']), str(m2['failed'])],
-        ["Network", "Avg Bytes / Op", f"{m1['avg_bytes_per_op']:.1f}", f"{m2['avg_bytes_per_op']:.1f}"],
-        ["Resources", "Avg CPU Usage (%)", f"{m1['avg_cpu_percent']:.2f}", f"{m2['avg_cpu_percent']:.2f}"],
-        ["Resources", "Peak Memory (MB)", f"{m1['peak_mem_mb']:.2f}", f"{m2['peak_mem_mb']:.2f}"],
-        ["Summary", "Total Requests", str(m1['total_requests']), str(m2['total_requests'])],
-        ["Summary", "Total Duration (sec)", f"{m1['total_duration_sec']:.2f}", f"{m2['total_duration_sec']:.2f}"],
-    ]
+    report_rows = [["Metric", ARCHS["arch1"][0], ARCHS["arch2"][0]]]
+    for key, label in [("median", "Median (ms)"), ("iqr", "IQR (ms)"), ("p95", "P95 (ms)"),
+                       ("p95_ci", "P95 95% CI (ms)"), ("min", "Min (ms)"), ("max", "Max (ms)"),
+                       ("success", "Successful / sent")]:
+        vals = []
+        for arch in order:
+            v = summary[arch][key] if summary[arch] else "-"
+            vals.append(f"{v:.0f}" if isinstance(v, (float, np.floating)) else str(v))
+        report_rows.append([label] + vals)
 
-    # 1. Print to Console
-    print("\n" + "=" * 85)
-    print(f"{'Category':<15} | {'Metric':<25} | {'Arch 1 (Zrok)':<18} | {'Arch 2 (DB Poll)':<18}")
-    print("=" * 85)
-    for row in report_rows[1:]: # Skip header for console print
-        print(f"{row[0]:<15} | {row[1]:<25} | {row[2]:<18} | {row[3]:<18}")
-    print("=" * 85 + "\n")
+    for session in sorted({r["session"] for r in rows}):
+        meds = []
+        for arch in order:
+            x = [float(r["latency_ms"]) for r in rows
+                 if r["session"] == session and r["arch"] == arch and r["success"] == "1"]
+            meds.append(f"{np.median(x):.0f}" if x else "-")
+        report_rows.append([f"Session {session} median (ms)"] + meds)
 
-    # 2. Export to CSV
-    csv_filename = "benchmark_report.csv"
-    with open(csv_filename, mode='w', newline='', encoding='utf-8') as file:
-        writer = csv.writer(file)
-        writer.writerows(report_rows)
-    
-    print(f"Successfully exported comparative report to: {csv_filename}")
+    # Comparison between the two architectures (one value + its CI, not per-architecture)
+    comparison_rows = []
+    if len(lat["arch1"]) and len(lat["arch2"]):
+        a, b = lat["arch1"], lat["arch2"]
+        d = np.median(b) - np.median(a)
+        dd = (np.median(rng.choice(b, size=(BOOTSTRAP, len(b)), replace=True), axis=1)
+              - np.median(rng.choice(a, size=(BOOTSTRAP, len(a)), replace=True), axis=1))
+        comparison_rows = [
+            ["Comparison", "Value", "95% CI"],
+            ["Median difference, Arch 2 - Arch 1 (ms)", f"{d:.0f}",
+             f"{np.percentile(dd, 2.5):.0f}-{np.percentile(dd, 97.5):.0f}"],
+            ["Median ratio, Arch 2 / Arch 1", f"{np.median(b) / np.median(a):.2f}", ""],
+        ]
+
+    print("\n" + "=" * 78)
+    for row in report_rows:
+        print(f"{row[0]:<40} | {row[1]:<16} | {row[2]:<16}")
+    if comparison_rows:
+        print("-" * 78)
+        for row in comparison_rows:
+            print(f"{row[0]:<40} | {row[1]:<16} | {row[2]:<16}")
+    print("=" * 78)
+    with open("benchmark_report.csv", "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerows(report_rows)
+        if comparison_rows:
+            w.writerow([])
+            w.writerows(comparison_rows)
+
+    seg_rows = [["Arch", "Segment", "Median (ms)", "N"]]
+    seg_medians = {}
+    for arch in order:
+        per = {}
+        for r in rows:
+            if r["arch"] == arch and r["success"] == "1":
+                for k, v in segments(r).items():
+                    if v is not None:
+                        per.setdefault(k, []).append(v)
+        seg_medians[arch] = {k: float(np.median(v)) for k, v in per.items()}
+        for k, v in per.items():
+            seg_rows.append([ARCHS[arch][0], k, f"{np.median(v):.0f}", len(v)])
+    with open("segments_report.csv", "w", newline="", encoding="utf-8") as f:
+        csv.writer(f).writerows(seg_rows)
+    print("\nPer-segment medians:")
+    for row in seg_rows[1:]:
+        print(f"  {row[0]:<18} {row[1]:<28} {row[2]:>7} ms  (n={row[3]})")
+
+    plot_figures(lat, seg_medians, order)
+    print("\nSaved benchmark_report.csv, segments_report.csv, latency_cdf.png, latency_breakdown.png")
+
+
+def plot_figures(lat, seg_medians, order):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    plt.rcParams.update({"font.size": 12, "axes.titlesize": 13, "axes.labelsize": 12,
+                         "xtick.labelsize": 11, "ytick.labelsize": 11, "legend.fontsize": 10})
+
+    # CDF of end-to-end latency
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+    for arch in order:
+        x = np.sort(lat[arch])
+        if len(x):
+            ax.step(x, np.arange(1, len(x) + 1) / len(x), where="post",
+                    linewidth=2, label=ARCHS[arch][0])
+    ax.set_xlabel("End-to-end latency (ms)")
+    ax.set_ylabel("Cumulative fraction of requests")
+    ax.set_ylim(0, 1.02)
+    ax.legend(loc="lower right")
+    ax.grid(alpha=0.3)
+    fig.savefig("latency_cdf.png", dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+    # Stacked per-segment median latency
+    fig, ax = plt.subplots(figsize=(9, 4))
+    cmap = plt.get_cmap("tab20")
+    seen = {}
+    for i, arch in enumerate(order):
+        left = 0.0
+        for k, v in seg_medians[arch].items():
+            v = max(v, 0.0)
+            if k not in seen:
+                seen[k] = cmap(len(seen) % 20)
+            ax.barh(i, v, left=left, color=seen[k], edgecolor="white", height=0.55,
+                    label=k)
+            left += v
+    ax.set_yticks(range(len(order)))
+    ax.set_yticklabels([ARCHS[a][0] for a in order])
+    ax.invert_yaxis()
+    ax.set_xlabel("Median latency per segment (ms)")
+    ax.grid(axis="x", alpha=0.3)
+    handles, labels = ax.get_legend_handles_labels()
+    uniq = dict(zip(labels, handles))
+    ax.legend(uniq.values(), uniq.keys(), loc="upper left", bbox_to_anchor=(1.01, 1),
+              frameon=False)
+    fig.savefig("latency_breakdown.png", dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Automated Comparative Benchmark Engine (Sequential)")
-    parser.add_argument("--run", choices=["arch1", "arch2"], help="Run target architecture benchmark")
-    parser.add_argument("--report", action="store_true", help="Generate comparative report")
+    parser = argparse.ArgumentParser(description="Benchmark: Arch 1 (Zrok) vs Arch 2 (DB Poll), one architecture per session")
+    parser.add_argument("--run", choices=["arch1", "arch2"], help="Run one session of the given architecture")
+    parser.add_argument("--session", default="s1", help="Session label, e.g. s1, s2, s3 (default: s1)")
+    parser.add_argument("--report", action="store_true", help="Report over all raw_arch*_*.csv files")
     args = parser.parse_args()
 
-    if args.run == "arch1":
-        print("--- Benchmarking Architecture 1 (Direct Zrok Tunnel) ---")
-        res, duration, cpu, mem = asyncio.run(run_sequential_benchmark("Arch 1", ARCH1_URL, "GET", "/temphum"))
-        process_and_save(res, duration, cpu, mem, "arch1_metrics.json")
-        
-    elif args.run == "arch2":
-        print("--- Benchmarking Architecture 2 (Supabase Cloud Polling) ---")
-        res, duration, cpu, mem = asyncio.run(run_sequential_benchmark("Arch 2", ARCH2_URL, "POST", "/th"))
-        process_and_save(res, duration, cpu, mem, "arch2_metrics.json")
-        
+    if args.run:
+        asyncio.run(run_session(args.run, args.session))
     elif args.report:
         generate_report()
     else:

@@ -1,12 +1,13 @@
 [Unit]
 Description=Poll Service for RaspPi
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/Poll
-ExecStart=/Poll/.venv/bin/python3 /Poll/script.py
+WorkingDirectory=/home/dietpi/API Cloud/REST/Poll
+ExecStart="/home/dietpi/API Cloud/REST/Poll/.venv/bin/python3" "/home/dietpi/API Cloud/REST/Poll/script.py"
 Restart=always
 RestartSec=5
 

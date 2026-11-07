@@ -19,7 +19,7 @@ plt.rcParams.update(
     }
 )
 
-BASE_URL = "https://restapi3.shares.zrok.io"
+BASE_URL = "https://restapi5.shares.zrok.io"
 
 ui.add_css(
     """
@@ -122,7 +122,7 @@ async def check_endpoint(endpoint, timeout=5):
 
 async def fetch_sensor(endpoint, field, timeout=20):
     async with httpx.AsyncClient() as client:
-        resp = await client.get(f"{BASE_URL}{endpoint}", timeout=timeout)
+        resp = await client.post(f"{BASE_URL}{endpoint}", timeout=timeout)
         resp.raise_for_status()
         val = resp.json().get(field)
         if val is None:
@@ -161,7 +161,7 @@ def render_last_collection(title, data_key, stats_key, metrics):
     with ui.card().classes("flex-1 min-w-[300px] p-6"):
         ui.label(title).classes(
             "text-2xl font-bold text-[var(--text)] mb-4"
-        ) 
+        )
         data = app.storage.user.get(data_key)
         stats = app.storage.user.get(stats_key) or {}
         if data:
@@ -190,8 +190,8 @@ def render_overview():
             fetch_all_btn.text = "Fetching All..."
             try:
                 for name, endpoint, field, unit, log_key in [
-                    ("Temperature", "/temphum", "temp", "°C", "temp_log"),
-                    ("Humidity", "/temphum", "hum", "%", "hum_log"),
+                    ("Temperature", "/th", "temp", "°C", "temp_log"),
+                    ("Humidity", "/th", "hum", "%", "hum_log"),
                     ("Gas", "/gas", "gas", "ppm", "gas_log"),
                 ]:
                     try:
@@ -425,7 +425,7 @@ def render_fetch_card(name, endpoint, field, unit, log_key):
 def render_collect_card(sensor_type):
     is_th = sensor_type == "temphum"
     title = f"Data Collection ({'Temp/Hum' if is_th else 'Gas'})"
-    endpoint = "/ctemphum" if is_th else "/cgas"
+    endpoint = "/cth" if is_th else "/cgas"
     data_key, exp_key = (
         ("temphum_data", "temphum_exp") if is_th else ("gas_data", "gas_exp")
     )
@@ -594,12 +594,12 @@ def render_collect_card(sensor_type):
                     if m["col"] in df.columns:
                         with ui.card().classes("w-full p-4 mb-6"):
                             ui.label(m["title"]).classes(
-                                "text-2xl font-bold mb-4 text-[var(--text)]" 
+                                "text-2xl font-bold mb-4 text-[var(--text)]"
                             )
                             with ui.row().classes(
                                 "w-full justify-around mb-4 p-3 bg-[var(--bg-secondary)] rounded-lg"
                             ):
-                                
+
                                 stats_key = "temphum_stats" if is_th else "gas_stats"
                                 edge_stats = app.storage.user.get(stats_key, {}) or {}
                                 col_stats = edge_stats.get(m["col"], {})
@@ -637,8 +637,8 @@ def index():
     with ui.header().classes("h-25 items-center px-6"):
         ui.label("Sensor Dashboard").classes(
             "text-3xl font-bold text-[var(--text)]"
-        ) 
-        
+        )
+
         with ui.row().classes(
             "items-center gap-2 ml-4 px-3 py-1 bg-[var(--card)] border border-[var(--border)] rounded-lg"
         ):
@@ -672,10 +672,10 @@ def index():
     with ui.left_drawer(value=True).classes("p-4").props("width=250 elevated"):
         ui.label("Navigation").classes(
             "text-xl font-bold mb-6 text-[var(--text)] px-2"
-        ) 
+        )
         cards_config = {
-            "temp": ("Temperature", "/temphum", "temp", "°C", "temp_log"),
-            "hum": ("Humidity", "/temphum", "hum", "%", "hum_log"),
+            "temp": ("Temperature", "/th", "temp", "°C", "temp_log"),
+            "hum": ("Humidity", "/th", "hum", "%", "hum_log"),
             "gas": ("Gas", "/gas", "gas", "ppm", "gas_log"),
         }
         nav_buttons = {}

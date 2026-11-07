@@ -1,0 +1,13 @@
+Metric,Arch 1 (Zrok),Arch 2 (DB Poll)
+Median (ms),1479,2944
+IQR (ms),1286-1811,2524-3772
+P95 (ms),2247,4168
+P95 95% CI (ms),2026-2955,4070-4387
+Min (ms),936,1561
+Max (ms),4046,5170
+Successful / sent,120/120,120/120
+Session s1 median (ms),1479,2944
+
+Comparison,Value,95% CI
+"Median difference, Arch 2 - Arch 1 (ms)",1465,1344-1581
+"Median ratio, Arch 2 / Arch 1",1.99,

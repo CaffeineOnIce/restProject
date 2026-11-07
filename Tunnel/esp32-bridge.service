@@ -1,13 +1,14 @@
 [Unit]
 Description=Flask REST API Bridge for ESP32
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/Tunnel
-Environment=PYTHONPATH=/Tunnel
-ExecStart=/Tunnel/.venv/bin/python3 /Tunnel/script.py
+WorkingDirectory=/home/dietpi/API Cloud/REST/Tunnel
+Environment="PYTHONPATH=/home/dietpi/API Cloud/REST/Tunnel"
+ExecStart="/home/dietpi/API Cloud/REST/Tunnel/.venv/bin/python3" "/home/dietpi/API Cloud/REST/Tunnel/script.py"
 Restart=always
 RestartSec=5
 

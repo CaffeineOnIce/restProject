@@ -1,0 +1,13 @@
+Arch,Segment,Median (ms),N
+Arch 1 (Zrok),network_tunnel,675,120
+Arch 1 (Zrok),esp_read,142,120
+Arch 1 (Zrok),db_log,615,120
+Arch 1 (Zrok),pi_other,0,120
+Arch 2 (DB Poll),network_render,454,120
+Arch 2 (DB Poll),render_insert,167,120
+Arch 2 (DB Poll),pi_poll_wait (x-host),1006,120
+Arch 2 (DB Poll),pi_claim,87,120
+Arch 2 (DB Poll),esp_read,183,120
+Arch 2 (DB Poll),db_log,89,120
+Arch 2 (DB Poll),pi_complete,0,120
+Arch 2 (DB Poll),render_poll_wait (x-host),888,120
